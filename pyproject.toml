@@ -1,0 +1,14 @@
+[project]
+name = "adjutant"
+version = "0.1.0"
+description = "A data-flow autonomous development loop"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+adjutant = "adjutant.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
