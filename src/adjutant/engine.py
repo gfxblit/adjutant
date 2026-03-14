@@ -1,65 +1,36 @@
+import os
 import subprocess
-import json
-import time
+import sys
 
-from adjutant.prompts import SCV_CODER_PROMPT, SCV_TESTER_PROMPT
-
-def get_ready_objectives(role: str) -> list[str]:
-    # Poll bd for ready objectives assigned to a specific role
-    cmd = ["bd", "list", "--ready", f"--label=role:{role}", "--json"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if result.returncode == 0 and result.stdout.strip():
-            beads = json.loads(result.stdout)
-            return [b['id'] for b in beads]
-    except Exception as e:
-        print(f"Error querying bd: {e}")
-    return []
-
-def run_scv(objective_id: str, role: str):
-    print(f"\n[Deploying SCV-{role.upper()} to Objective {objective_id}]")
-    if role == "coder":
-        system_prompt = SCV_CODER_PROMPT.format(objective_id=objective_id)
-    elif role == "tester":
-        system_prompt = SCV_TESTER_PROMPT.format(objective_id=objective_id)
-    else:
-        print(f"Unknown role: {role}")
-        return
-
-    cmd = [
-        "gemini-cli",
-        "--system-prompt", system_prompt,
-        f"Execute Objective {objective_id}"
-    ]
+def run_adjutant_agent(initial_directive: str):
+    """
+    Launches the Adjutant (Planner) agent as an interactive Gemini session.
+    The Adjutant's specialized persona is injected via GEMINI_SYSTEM_MD.
+    """
+    print(f"\n[Adjutant Online: Initiating Mission Planning]")
+    
+    # Resolve the path to the Adjutant's system prompt
+    # We use an absolute path to ensure it's found regardless of where the command is run
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    system_prompt_path = os.path.join(base_dir, "adjutant", "adjutant_system.md")
+    
+    # Configure the environment to override the system prompt
+    env = os.environ.copy()
+    env["GEMINI_SYSTEM_MD"] = system_prompt_path
+    
+    # We also want to ensure experimental agents are enabled in case they aren't in settings.json
+    # Though it's better to rely on settings.json for persistence.
+    
+    # Launch gemini in interactive mode (-i) with the initial directive
+    cmd = ["gemini", "-i", initial_directive]
     
     try:
-        # Execute the SCV, streaming output to the terminal
-        subprocess.run(cmd, check=False)
+        # We use subprocess.run without capturing output to allow 
+        # the interactive gemini session to take over the terminal.
+        subprocess.run(cmd, env=env, check=False)
+    except FileNotFoundError:
+        print("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error executing SCV: {e}")
-
-def run_base_loop(mission_id: str = None):
-    print("Adjutant online. Monitoring Objectives...")
-    if mission_id:
-        print(f"Restricting context to Mission: {mission_id}")
-    
-    # Ideally, we would check if mission is closed here, but for now we poll indefinitely
-    # until interrupted.
-    try:
-        while True:
-            # 1. Check for Coding Objectives
-            coder_objectives = get_ready_objectives("scv-coder")
-            if coder_objectives:
-                run_scv(coder_objectives[0], "coder")
-                continue # Restart loop to re-evaluate the graph
-
-            # 2. Check for Testing/Verification Objectives
-            tester_objectives = get_ready_objectives("scv-tester")
-            if tester_objectives:
-                run_scv(tester_objectives[0], "tester")
-                continue # Restart loop
-
-            print("Awaiting further directives or human intervention...", end="\r")
-            time.sleep(5)
-    except KeyboardInterrupt:
-        print("\nAdjutant offline.")
+        print(f"Error launching Adjutant: {e}")
+        sys.exit(1)

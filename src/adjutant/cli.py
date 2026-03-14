@@ -1,12 +1,16 @@
 import argparse
-from adjutant.engine import run_base_loop
+from adjutant.engine import run_adjutant_agent
 
 def main():
     parser = argparse.ArgumentParser(description="Adjutant Autonomous Development Loop")
-    parser.add_argument("--mission", help="Specific mission ID to execute", default=None)
+    parser.add_argument("mission", nargs="*", help="Initial mission directive")
     args = parser.parse_args()
     
-    run_base_loop(mission_id=args.mission)
+    mission_directive = " ".join(args.mission)
+    if not mission_directive:
+        mission_directive = "I'm ready to assist with a mission."
+        
+    run_adjutant_agent(mission_directive)
 
 if __name__ == "__main__":
     main()

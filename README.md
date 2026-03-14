@@ -1,105 +1,51 @@
-# Adjutant: Data-Flow Autonomous Development
+# Adjutant: Interactive AI Strategic Planner
 
 ## Overview
-This document outlines the architecture for **Adjutant**, an autonomous AI development loop. It replaces complex state-machine orchestrators (like LangGraph) with a simple, data-driven orchestration model powered by the **Beads (`bd`) CLI** and the **Gemini CLI**.
+**Adjutant** is an autonomous AI strategic planner and orchestrator. It uses the **Gemini CLI** and the **Beads (`bd`) CLI** to help you execute complex development "Missions" by decomposing them into a graph of "Objectives" and delegating work to specialized sub-agents.
 
-The core philosophy is to shift from **Control Flow Orchestration** to **Data Flow Orchestration** where agents independently pull work from a persistent, git-backed task graph.
+Unlike typical daemon-based orchestrators, the Adjutant is an **interactive agent session**. When you launch a mission, you enter a conversation with the Adjutant, who uses its planning persona to help you build and manage the task graph.
 
-*Theming:* We use a Terran (StarCraft) inspired vocabulary. The user interacts with the **Adjutant** (the entry point/Planner), which manages **Missions** (Epics) broken down into **Objectives** (Beads). The work is executed by **SCVs** (Worker Agents powered by `gemini-cli`).
+## Getting Started
 
-## Core Principles
-1. **Beads as the Sole Source of Truth:** All goals, tasks, bugs, and agent assignments are represented as Beads (Objectives) in the `.beads` directory. 
-2. **Declarative Dependency Graph:** Work ordering is determined natively by Beads dependencies (`bd dep add <blocked> <blocker>`). An SCV can only see an Objective when all its blockers are resolved.
-3. **Role-Based Routing:** The daemon loop simply spawns SCVs to work on specific Objectives labeled with their role (e.g., `role:scv-coder`, `role:scv-tester`).
-4. **Agent Autonomy:** The SCVs (running via `gemini-cli`) use their own native shell capabilities to interact with the `bd` CLI directly, based on their system prompts. The engine does not need to wrap these commands for them.
+To launch a new mission, use the `adjutant` command followed by your mission directive:
 
-## The Architecture
-
-### 1. The Global Mission & The Adjutant (Planning Phase)
-Every high-level user request starts by invoking the **Adjutant**:
-`adjutant "Implement a new calculator module"`
-
-The Adjutant serves as the Planner:
-- It creates a **Mission** (`bd create -t epic ...`).
-- It breaks the Mission down into specific implementation Objectives (`bd create -t task ...`).
-- It creates verification Objectives (`bd create -t chore ...`).
-- It wires up the dependency graph, blocking verification with implementation (`bd dep add ...`).
-- It assigns roles via labels (`bd label add ... role:scv-coder`).
-
-*Note: The Adjutant itself could be powered by a `gemini-cli` instance with a specific "Planner" prompt that instructs it to use the `bd` CLI to build out the graph.*
-
-### 2. The Execution Engine (The Base Loop)
-Once the Adjutant has planned the Mission, a lightweight `while` loop polls the database for "ready" work and drops an SCV to execute it.
-
-```python
-import subprocess
-import json
-import time
-
-def get_ready_objectives(role: str) -> list[str]:
-    # The engine only needs enough `bd` awareness to drive the loop.
-    cmd = ["bd", "list", "--ready", f"--label=role:{role}", "--json"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0 and result.stdout.strip():
-        try:
-            beads = json.loads(result.stdout)
-            return [b['id'] for b in beads]
-        except json.JSONDecodeError:
-            pass
-    return []
-
-def run_base_loop(mission_id: str):
-    print(f"Adjutant online. Monitoring Mission {mission_id}...")
-    
-    while not is_mission_closed(mission_id):
-        # 1. Check for Coding Objectives
-        coder_objectives = get_ready_objectives("scv-coder")
-        if coder_objectives:
-            print(f"Deploying SCV-Coder to Objective {coder_objectives[0]}")
-            run_scv(coder_objectives[0], "coder")
-            continue # Restart loop to re-evaluate the graph
-
-        # 2. Check for Testing/Verification Objectives
-        tester_objectives = get_ready_objectives("scv-tester")
-        if tester_objectives:
-            print(f"Deploying SCV-Tester to Objective {tester_objectives[0]}")
-            run_scv(tester_objectives[0], "tester")
-            continue # Restart loop
-
-        print("Awaiting further directives or human intervention...")
-        time.sleep(5)
-```
-
-### 3. The SCVs (Powered by Gemini CLI)
-The SCVs are driven by `gemini-cli` instances. The engine does not micromanage them; it simply drops them into the environment with a strict system prompt and an Objective ID.
-
-When `run_scv(objective_id, role)` is called, the loop spawns a subprocess:
-
-**Example SCV-Coder Execution:**
 ```bash
-gemini-cli --system-prompt "You are an SCV-Coder. Your current Objective is $OBJECTIVE_ID. 
-1. Run 'bd show $OBJECTIVE_ID' to read your parameters. 
-2. Write the necessary code to fulfill the parameters. 
-3. Once complete, run 'bd close $OBJECTIVE_ID' to signal job completion." \
-"Execute Objective $OBJECTIVE_ID"
+adjutant "Implement a fullstack web calculator with React and FastAPI"
 ```
 
-**Example SCV-Tester Execution:**
+This will:
+1.  **Initialize the Adjutant Persona**: Injects a specialized "Planner" system prompt into the Gemini CLI.
+2.  **Start an Interactive Session**: You can refine the plan, approve `bd` task creation, and monitor progress.
+3.  **Spawn SCV Sub-Agents**: The Adjutant can delegate technical work (coding, testing) to specialized worker sub-agents (`scv-coder`, `scv-tester`) as tools.
+
+## Core Concepts
+
+### Missions and Objectives
+- **Mission**: A high-level goal, represented as an **Epic** bead in `bd`.
+- **Objective**: A specific, actionable task, bug fix, or chore, represented as a **Bead** with dependencies and status.
+
+### The Sub-Agent Workforce (SCVs)
+The Adjutant can call upon specialized sub-agents:
+- **`scv-coder`**: Handles implementation, refactoring, and bug fixes.
+- **`scv-tester`**: Handles verification, running tests, and managing test failures (Red Alert Pivots).
+
+## The Workflow
+
+1.  **Mission Intake**: You provide a high-level goal.
+2.  **Interactive Planning**: The Adjutant proposes a plan and uses `bd create` to build the task graph.
+3.  **Delegation**: The Adjutant calls sub-agents (e.g., `scv_coder("Implement the login API for bd-123")`) as tools.
+4.  **Completion**: Once all objectives are closed and the mission is successful, the Adjutant helps you "Land the Plane" by finalizing the changes and pushing to the remote.
+
+## Development Setup
+
+The Adjutant is implemented in Python and orchestrates work via the `gemini` and `bd` CLIs.
+
+To run the local development version:
 ```bash
-gemini-cli --system-prompt "You are an SCV-Tester. Your current Objective is $OBJECTIVE_ID. 
-1. Run tests to verify the recent code changes. 
-2. If tests pass, run 'bd close $OBJECTIVE_ID'. 
-3. If tests fail, you must create a block: run 'bd create -t bug ...' containing the stack trace, label it 'role:scv-coder', and block your current Objective by running 'bd dep add $OBJECTIVE_ID <new-bug-id>'." \
-"Verify Objective $OBJECTIVE_ID"
+# From the project root
+export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+python -m adjutant.cli "My New Mission"
 ```
 
-### 4. Handling Failures (The Red Alert Pivot)
-When a test fails, the SCV-Tester alters the graph natively via its shell tools.
-- **Trigger:** SCV-Tester (Gemini CLI) runs `pytest` and it fails.
-- **Action:** The SCV-Tester follows its prompt instructions, natively running `bd create`, `bd label add`, and `bd dep add`.
-- **Result:** The `gemini-cli` process ends. On the next iteration of the Adjutant `while` loop, the tester Objective is blocked, and the new bug Objective surfaces for the SCV-Coder.
-
-## Implementation Roadmap
-1. **Engine Shell:** Write the core `adjutant` Python script with the `while` loop and `subprocess` calls to `gemini-cli`.
-2. **Prompt Migration:** Extract the Coder and Tester system prompts from the legacy `copium-loop` repository, adapting them to include instructions on how to use the `bd` CLI natively.
-3. **The Planner Prompt:** Create a system prompt for the initial Adjutant execution so it knows how to break down a "Mission" into `bd` tasks and chores with dependencies.
+## Mandatory Workflow for Agents
+All agents (Adjutant and SCVs) must follow the rules defined in [AGENTS.md](AGENTS.md), especially regarding the use of the `bd` CLI as the sole source of truth for task state.
