@@ -1,0 +1,8 @@
+{
+    "hooks": [
+        {
+            "hookName": "BeforeAgent",
+            "command": "PYTHONPATH=src python -m adjutant.hooks"
+        }
+    ]
+}

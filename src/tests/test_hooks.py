@@ -1,7 +1,9 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import json
-from adjutant.hooks import get_mission_telemetry
+import io
+import sys
+from adjutant.hooks import get_mission_telemetry, main
 
 class TestHooks(unittest.TestCase):
     @patch("subprocess.check_output")
@@ -31,6 +33,34 @@ class TestHooks(unittest.TestCase):
         
         telemetry = get_mission_telemetry()
         self.assertEqual(telemetry, "Mission telemetry unavailable")
+
+    @patch("adjutant.hooks.get_mission_telemetry")
+    @patch("sys.stdin", new_callable=io.StringIO)
+    @patch("sys.stdout", new_callable=io.StringIO)
+    def test_cli_hook_protocol(self, mock_stdout, mock_stdin, mock_get_telemetry):
+        # Mocking input JSON from Gemini
+        input_data = {
+            "hookName": "BeforeAgent",
+            "agent": {"name": "TestAgent"},
+            "mission": {"id": "test-mission"}
+        }
+        mock_stdin.write(json.dumps(input_data))
+        mock_stdin.seek(0)
+        
+        # Mocking telemetry result
+        mock_get_telemetry.return_value = "Mocked Telemetry"
+        
+        # Call the CLI entry point
+        main()
+        
+        # Verify output JSON
+        output_data = json.loads(mock_stdout.getvalue())
+        expected_output = {
+            "hookSpecificOutput": {
+                "additionalContext": "Mocked Telemetry"
+            }
+        }
+        self.assertEqual(output_data, expected_output)
 
 if __name__ == "__main__":
     unittest.main()

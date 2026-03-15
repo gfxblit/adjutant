@@ -116,37 +116,6 @@ class TestAdjutantHUD(unittest.TestCase):
         hud.stop()
 
 class TestRunAdjutantAgent(unittest.TestCase):
-    @patch("adjutant.engine.get_mission_telemetry")
-    @patch("subprocess.run")
-    @patch("os.path.exists")
-    @patch("os.remove")
-    @patch("adjutant.engine.AdjutantHUD")
-    def test_run_adjutant_agent_telemetry_replacement(self, mock_hud_class, mock_remove, mock_exists, mock_run, mock_get_telemetry):
-        mock_exists.return_value = True
-        mock_get_telemetry.return_value = "## Mission Telemetry\n- Some active objective"
-        directive = "Test mission"
-        
-        # Template with the telemetry placeholder
-        template_content = "System: ${SubAgents} Telemetry: ${MissionTelemetry}"
-        
-        m = mock_open(read_data=template_content)
-        
-        with patch("builtins.open", m):
-            run_adjutant_agent(directive)
-        
-        # Check that get_mission_telemetry was called
-        mock_get_telemetry.assert_called_once()
-        
-        handle = m()
-        # Find the write() call with the resolved content
-        resolved_content = ""
-        for call in handle.write.call_args_list:
-            resolved_content += call[0][0]
-            
-        self.assertIn("## Mission Telemetry", resolved_content)
-        self.assertIn("- Some active objective", resolved_content)
-        self.assertNotIn("${MissionTelemetry}", resolved_content)
-
     @patch("subprocess.run")
     @patch("os.path.exists")
     @patch("os.remove")

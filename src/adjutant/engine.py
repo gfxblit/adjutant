@@ -3,7 +3,6 @@ import subprocess
 import sys
 import threading
 import json
-from .hooks import get_mission_telemetry
 
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
@@ -81,10 +80,6 @@ def run_adjutant_agent(initial_directive: str):
     system_prompt = system_prompt.replace("${SubAgents}", sub_agents_doc)
     system_prompt = system_prompt.replace("${AgentSkills}", "") # Reserved for future use
     
-    # Get and inject mission telemetry
-    telemetry = get_mission_telemetry()
-    system_prompt = system_prompt.replace("${MissionTelemetry}", telemetry)
-
     # Write the resolved prompt to a temporary file for the session
     temp_prompt_path = os.path.join(base_dir, ".adjutant_resolved_system.md")
     with open(temp_prompt_path, "w") as f:

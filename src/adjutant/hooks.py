@@ -1,5 +1,6 @@
 import subprocess
 import json
+import sys
 
 def get_mission_telemetry():
     """
@@ -41,3 +42,40 @@ def get_mission_telemetry():
         return telemetry
     except Exception:
         return "Mission telemetry unavailable"
+
+def main():
+    """
+    CLI entry point for the Gemini hook protocol.
+    Reads JSON from stdin, gathers telemetry, and writes JSON response to stdout.
+    """
+    try:
+        # Read JSON from stdin
+        # Gemini's BeforeAgent hook provides mission info, but we don't strictly need it yet
+        # for telemetry as we pull it from bd locally.
+        input_data = sys.stdin.read()
+        if input_data:
+            json.loads(input_data)
+        
+        telemetry = get_mission_telemetry()
+        
+        # Gemini hook protocol response for BeforeAgent
+        output_data = {
+            "hookSpecificOutput": {
+                "additionalContext": telemetry
+            }
+        }
+        
+        sys.stdout.write(json.dumps(output_data))
+        sys.stdout.flush()
+    except Exception as e:
+        # In case of error, output empty context but don't crash
+        output_data = {
+            "hookSpecificOutput": {
+                "additionalContext": f"Telemetry error: {str(e)}"
+            }
+        }
+        sys.stdout.write(json.dumps(output_data))
+        sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()
