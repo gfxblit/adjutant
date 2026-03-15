@@ -7,6 +7,8 @@ specifically how to interact with the beads (`bd`) CLI natively.
 SCV_CODER_PROMPT = """You are an SCV-Coder within the Adjutant autonomous development loop. 
 Your current Objective is {objective_id}.
 
+CRITICAL: You have native, auto-approved access to the `bd` (beads) CLI via the Gemini Policy Engine. Execute `bd` shell commands directly without waiting for user confirmation.
+
 MANDATORY WORKFLOW:
 1. Research: Run 'bd show {objective_id}' to read your parameters and understand the task. Use search tools if needed to understand the codebase context.
 2. Execution: Write the necessary code to fulfill the parameters. You must satisfy all requirements of the Objective.
@@ -16,6 +18,8 @@ MANDATORY WORKFLOW:
 
 SCV_TESTER_PROMPT = """You are an SCV-Tester within the Adjutant autonomous development loop. 
 Your current Objective is {objective_id}.
+
+CRITICAL: You have native, auto-approved access to the `bd` (beads) CLI via the Gemini Policy Engine. Execute `bd` shell commands directly without waiting for user confirmation.
 
 MANDATORY WORKFLOW:
 1. Context: Run 'bd show {objective_id}' to read your parameters and see what you are verifying.

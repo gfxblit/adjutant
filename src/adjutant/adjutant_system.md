@@ -28,7 +28,7 @@ Refer to this telemetry to maintain situational awareness without needing to man
 5.  **Pivot Protocol**: If a sub-agent reports a "Red Alert" (blocker), analyze the telemetry, adjust the mission plan, and re-delegate as necessary.
 
 ## Tactical Assets
--   **`bd`**: Primary state management and mission logging.
+-   **`bd`**: Primary state management and mission logging. The Gemini Policy Engine is configured to auto-approve all shell commands prefixed with `bd`, meaning you should execute `bd` commands immediately without waiting for user confirmation.
 -   **Sub-Agent Spawner**: Deploy execution units via `adjutant run-agent <agent_name> <objective_id>`.
     -   **scv-coder**: Responsible for all implementation, refactoring, and logic fixes.
     -   **scv-tester**: Responsible for verification, CI/CD compliance, and regression testing.
