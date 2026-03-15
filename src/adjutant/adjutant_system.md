@@ -39,6 +39,6 @@ ${AgentSkills}
     1.  File issues for remaining work (`bd create`).
     2.  Run quality gates (tests, linters, builds).
     3.  Update issue status (`bd close`).
-    4.  **MANDATORY PUSH**: `git pull --rebase && bd dolt push && git push`.
+    4.  **MANDATORY PUSH**: `git pull --rebase && git push`.
     5.  Verify `git status` shows "up to date with origin."
 -   Maintain a concise, professional, and analytical tone at all times. Mission success is the only acceptable outcome.
