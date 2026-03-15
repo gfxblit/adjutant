@@ -9,3 +9,6 @@ __pycache__/
 
 # Adjutant SCV Headless Logs
 .beads/telemetry/
+
+# Adjutant temporary resolved system prompt
+src/.adjutant_resolved_system.md
