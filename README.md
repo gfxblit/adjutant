@@ -16,7 +16,18 @@ adjutant "Implement a fullstack web calculator with React and FastAPI"
 This will:
 1.  **Initialize the Adjutant Persona**: Injects a specialized "Planner" system prompt into the Gemini CLI.
 2.  **Start an Interactive Session**: You can refine the plan, approve `bd` task creation, and monitor progress.
-3.  **Spawn SCV Sub-Agents**: The Adjutant can delegate technical work (coding, testing) to specialized worker sub-agents (`scv-coder`, `scv-tester`) as tools.
+3.  **Delegate to SCV Sub-Agents**: The Adjutant delegates technical work (coding, testing) by spawning specialized worker sub-agents (`scv-coder`, `scv-tester`) asynchronously using the `adjutant run-agent` command.
+
+## CLI Subcommands
+
+### `adjutant plan [mission]`
+Starts an interactive mission planning session. This is the default behavior if no subcommand is provided.
+
+### `adjutant run-agent <agent> <objective_id>`
+Manually spawns a specialized sub-agent to work on a specific objective.
+
+- **`agent`**: One of `scv-coder` or `scv-tester`.
+- **`objective_id`**: The ID of the `bd` objective (e.g., `adjutant-aq1`).
 
 ## Core Concepts
 
@@ -29,12 +40,15 @@ The Adjutant can call upon specialized sub-agents:
 - **`scv-coder`**: Handles implementation, refactoring, and bug fixes.
 - **`scv-tester`**: Handles verification, running tests, and managing test failures (Red Alert Pivots).
 
+Sub-agents are spawned **asynchronously** in the background. Their execution is headless, and all output is captured in telemetry logs located at `.beads/telemetry/<objective_id>.log`.
+
 ## The Workflow
 
 1.  **Mission Intake**: You provide a high-level goal.
 2.  **Interactive Planning**: The Adjutant proposes a plan and uses `bd create` to build the task graph.
-3.  **Delegation**: The Adjutant calls sub-agents (e.g., `scv_coder("Implement the login API for bd-123")`) as tools.
-4.  **Completion**: Once all objectives are closed and the mission is successful, the Adjutant helps you "Land the Plane" by finalizing the changes and pushing to the remote.
+3.  **Delegation**: The Adjutant spawns sub-agents asynchronously to work on specific objectives.
+4.  **Monitoring**: You can monitor progress via the terminal HUD or by tailing the telemetry logs.
+5.  **Completion**: Once all objectives are closed and the mission is successful, the Adjutant helps you "Land the Plane" by finalizing the changes and pushing to the remote.
 
 ## Development Setup
 

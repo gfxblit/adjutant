@@ -3,6 +3,7 @@ import subprocess
 import sys
 import threading
 import json
+from .prompts import SCV_CODER_PROMPT, SCV_TESTER_PROMPT
 
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
@@ -67,19 +68,6 @@ def run_adjutant_agent(initial_directive: str):
     with open(system_prompt_path, "r") as f:
         system_prompt = f.read()
 
-    # Define the sub-agent tools documentation for the prompt
-    # In a real implementation, these would be actual executable tools,
-    # but for this bootstrap we'll describe them as available via the engine.
-    sub_agents_doc = """
-### Available Sub-Agents (Tools)
-- **scv_coder(objective_id: str, instructions: str)**: Deploys a coding agent to fulfill a specific objective.
-- **scv_tester(objective_id: str, instructions: str)**: Deploys a testing agent to verify an objective.
-"""
-    
-    # Simple template replacement
-    system_prompt = system_prompt.replace("${SubAgents}", sub_agents_doc)
-    system_prompt = system_prompt.replace("${AgentSkills}", "") # Reserved for future use
-    
     # Write the resolved prompt to a temporary file for the session
     temp_prompt_path = os.path.join(base_dir, ".adjutant_resolved_system.md")
     with open(temp_prompt_path, "w") as f:
@@ -110,3 +98,46 @@ def run_adjutant_agent(initial_directive: str):
         # Clean up the temporary prompt
         if os.path.exists(temp_prompt_path):
             os.remove(temp_prompt_path)
+
+def spawn_agent(agent_name: str, objective_id: str):
+    """
+    Spawns a sub-agent asynchronously.
+    """
+    prompts = {
+        "scv-coder": SCV_CODER_PROMPT,
+        "scv-tester": SCV_TESTER_PROMPT,
+    }
+    
+    if agent_name not in prompts:
+        raise ValueError(f"Unknown agent name: {agent_name}")
+    
+    prompt_template = prompts[agent_name]
+    prompt = prompt_template.format(objective_id=objective_id)
+    
+    # Resolve project root to find .beads directory
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(base_dir)
+    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    os.makedirs(telemetry_dir, exist_ok=True)
+    
+    log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
+    
+    # Launch gemini headless asynchronously
+    cmd = ["gemini", "-p", prompt]
+    
+    # We use a context manager to open the file, but Popen will inherit the FD.
+    # On Unix-like systems, the child process keeps the file descriptor open 
+    # even after the parent closes its file object, as long as it's not O_CLOEXEC.
+    log_file = open(log_path, "w")
+    subprocess.Popen(
+        cmd,
+        stdout=log_file,
+        stderr=log_file,
+        start_new_session=True
+    )
+    # We should not close log_file here immediately if we want to be safe, 
+    # but Popen should have duplicated it. 
+    # However, to be absolutely sure and avoid leaks in the parent, we can close it.
+    log_file.close()
+
+    print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")

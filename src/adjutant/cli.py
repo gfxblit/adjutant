@@ -1,16 +1,37 @@
 import argparse
-from adjutant.engine import run_adjutant_agent
+import sys
+from adjutant.engine import run_adjutant_agent, spawn_agent
 
 def main():
     parser = argparse.ArgumentParser(description="Adjutant Autonomous Development Loop")
-    parser.add_argument("mission", nargs="*", help="Initial mission directive")
-    args = parser.parse_args()
+    subparsers = parser.add_subparsers(dest="command")
+
+    # plan subcommand
+    plan_parser = subparsers.add_parser("plan", help="Mission planning (default)")
+    plan_parser.add_argument("mission", nargs="*", help="Initial mission directive")
+
+    # run-agent subcommand
+    run_agent_parser = subparsers.add_parser("run-agent", help="Spawn a sub-agent")
+    run_agent_parser.add_argument("agent", help="Agent name (e.g. scv-coder)")
+    run_agent_parser.add_argument("objective_id", help="Objective ID to work on")
+
+    # Handle default 'plan' subcommand for backward compatibility
+    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "run-agent", "-h", "--help"]:
+        # If the first argument is not a known command or help, assume 'plan'
+        sys.argv.insert(1, "plan")
     
-    mission_directive = " ".join(args.mission)
-    if not mission_directive:
-        mission_directive = "I'm ready to assist with a mission."
-        
-    run_adjutant_agent(mission_directive)
+    args = parser.parse_args()
+
+    if args.command == "run-agent":
+        spawn_agent(args.agent, args.objective_id)
+    else:
+        # If no command, it's 'plan' (either explicit or implicit)
+        # mission attribute only exists if 'plan' subcommand was used (explicitly or implicitly via insertion)
+        mission_args = getattr(args, "mission", [])
+        mission_directive = " ".join(mission_args)
+        if not mission_directive:
+            mission_directive = "I'm ready to assist with a mission."
+        run_adjutant_agent(mission_directive)
 
 if __name__ == "__main__":
     main()

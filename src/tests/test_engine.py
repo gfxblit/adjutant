@@ -120,12 +120,12 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("os.path.exists")
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
-    def test_run_adjutant_agent_template_replacement(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         directive = "Test mission"
         
         # We need to mock open to return our template and then capture what is written to the resolved file
-        template_content = "System: ${SubAgents} Skills: ${AgentSkills}"
+        template_content = "System: Content without placeholders"
         
         # Create a mock for the file handle
         m = mock_open(read_data=template_content)
@@ -133,7 +133,6 @@ class TestRunAdjutantAgent(unittest.TestCase):
         with patch("builtins.open", m):
             run_adjutant_agent(directive)
         
-        # Check template replacement
         # The first call to open is for reading the system prompt
         # The second call is for writing the resolved prompt
         
@@ -154,10 +153,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
         for call in handle.write.call_args_list:
             resolved_content += call[0][0]
             
-        self.assertIn("### Available Sub-Agents (Tools)", resolved_content)
-        self.assertIn("- **scv_coder", resolved_content)
-        self.assertNotIn("${SubAgents}", resolved_content)
-        self.assertNotIn("${AgentSkills}", resolved_content)
+        self.assertEqual(resolved_content, template_content)
+
 
     @patch("subprocess.run")
     @patch("os.path.exists")
