@@ -1,2 +1,0 @@
-#!/bin/bash
-GEMINI_SYSTEM_MD=src/adjutant/adjutant_system.md gemini -i "Analyze our refactoring progress. We have refactored src/adjutant/engine.py to launch an interactive session. We still need to update src/adjutant/cli.py to support positional mission arguments and update README.md. Create a new Mission for this work and generate the necessary Objectives (Tasks/Chores) using 'bd create --json' to track the remaining steps."

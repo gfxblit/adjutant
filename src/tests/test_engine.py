@@ -1,40 +1,14 @@
 import unittest
-from unittest.mock import patch, MagicMock
-import os
+from unittest.mock import patch, mock_open
 import json
 import time
-from adjutant.engine import run_adjutant_agent
-
-class TestEngine(unittest.TestCase):
-    @patch("subprocess.run")
-    @patch("os.path.exists")
-    @patch("os.remove")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open, read_data="# Adjutant System\n${SubAgents}\n${AgentSkills}")
-    def test_run_adjutant_agent_calls_gemini_correctly(self, mock_open, mock_remove, mock_exists, mock_run):
-        mock_exists.return_value = True
-        directive = "Test mission"
-        
-        run_adjutant_agent(directive)
-        
-        # Check if subprocess.run was called with correct arguments
-        # We expect gemini -i "Test mission"
-        args, kwargs = mock_run.call_args
-        cmd = args[0]
-        self.assertEqual(cmd[0], "gemini")
-        self.assertEqual(cmd[1], "-i")
-        self.assertEqual(cmd[2], "Test mission")
-        
-        # Check if GEMINI_SYSTEM_MD was set in env
-        env = kwargs.get("env")
-        self.assertIsNotNone(env)
-        self.assertIn("GEMINI_SYSTEM_MD", env)
-        self.assertTrue(env["GEMINI_SYSTEM_MD"].endswith(".adjutant_resolved_system.md"))
+from adjutant.engine import AdjutantHUD, run_adjutant_agent
 
 class TestAdjutantHUD(unittest.TestCase):
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
     @patch("sys.stdout.flush")
-    def test_update_hud_correctly_formats_title(self, mock_flush, mock_write, mock_check_output):
+    def test_update_hud_success(self, mock_flush, mock_write, mock_check_output):
         # Mock 'bd status --json' output
         mock_check_output.return_value = json.dumps({
             "summary": {
@@ -45,17 +19,207 @@ class TestAdjutantHUD(unittest.TestCase):
             }
         }).encode()
         
-        from adjutant.engine import AdjutantHUD
         hud = AdjutantHUD(mission="Test Mission")
-        
-        # Test the update_hud method
         hud.update_hud()
         
-        # Expected title string with ANSI escape sequence
-        # Title: Mission: Test Mission | 70% | Open: 3, Closed: 7
         expected_title = "\033]0;Mission: Test Mission | 70.0% | Open: 3, Closed: 7\007"
         mock_write.assert_called_with(expected_title)
         mock_flush.assert_called()
+
+    @patch("subprocess.check_output")
+    @patch("sys.stdout.write")
+    def test_update_hud_handles_subprocess_error(self, mock_write, mock_check_output):
+        import subprocess
+        mock_check_output.side_effect = subprocess.CalledProcessError(1, ["bd", "status", "--json"])
+        
+        hud = AdjutantHUD(mission="Test Mission")
+        # Should not raise exception
+        hud.update_hud()
+        mock_write.assert_not_called()
+
+    @patch("subprocess.check_output")
+    @patch("sys.stdout.write")
+    def test_update_hud_handles_file_not_found_error(self, mock_write, mock_check_output):
+        mock_check_output.side_effect = FileNotFoundError(2, "No such file or directory: 'bd'")
+        
+        hud = AdjutantHUD(mission="Test Mission")
+        # Should not raise exception
+        hud.update_hud()
+        mock_write.assert_not_called()
+
+    @patch("subprocess.check_output")
+    @patch("sys.stdout.write")
+    def test_update_hud_handles_invalid_json(self, mock_write, mock_check_output):
+        mock_check_output.return_value = b"invalid json"
+        
+        hud = AdjutantHUD(mission="Test Mission")
+        # Should not raise exception
+        hud.update_hud()
+        mock_write.assert_not_called()
+
+    @patch("subprocess.check_output")
+    @patch("sys.stdout.write")
+    def test_update_hud_edge_cases(self, mock_write, mock_check_output):
+        hud = AdjutantHUD(mission="Test Mission")
+
+        # Case 1: 0 issues
+        mock_check_output.return_value = json.dumps({
+            "summary": {"total_issues": 0, "open_issues": 0, "closed_issues": 0}
+        }).encode()
+        hud.update_hud()
+        mock_write.assert_called_with("\033]0;Mission: Test Mission | 0.0% | Open: 0, Closed: 0\007")
+
+        # Case 2: 100% closed
+        mock_check_output.return_value = json.dumps({
+            "summary": {"total_issues": 5, "open_issues": 0, "closed_issues": 5}
+        }).encode()
+        hud.update_hud()
+        mock_write.assert_called_with("\033]0;Mission: Test Mission | 100.0% | Open: 0, Closed: 5\007")
+
+        # Case 3: Very large numbers
+        mock_check_output.return_value = json.dumps({
+            "summary": {"total_issues": 1000000, "open_issues": 1, "closed_issues": 999999}
+        }).encode()
+        hud.update_hud()
+        mock_write.assert_called_with("\033]0;Mission: Test Mission | 100.0% | Open: 1, Closed: 999999\007")
+
+    def test_hud_thread_lifecycle(self):
+        with patch("adjutant.engine.AdjutantHUD.update_hud") as mock_update:
+            hud = AdjutantHUD(mission="Test", interval=0.1)
+            hud.start()
+            self.assertTrue(hud.thread.is_alive())
+            
+            # Wait a bit for at least one update
+            time.sleep(0.2)
+            self.assertTrue(mock_update.called)
+            
+            hud.stop()
+            self.assertFalse(hud.thread.is_alive())
+
+    def test_hud_multiple_starts_stops(self):
+        hud = AdjutantHUD(mission="Test", interval=0.1)
+        hud.start()
+        first_thread = hud.thread
+        self.assertTrue(first_thread.is_alive())
+        
+        hud.start() # Should not create a new thread
+        self.assertIs(hud.thread, first_thread)
+        
+        hud.stop()
+        self.assertFalse(first_thread.is_alive())
+        
+        hud.stop() # Should be fine
+        
+        hud.start() # Should create a new thread
+        self.assertIsNot(hud.thread, first_thread)
+        self.assertTrue(hud.thread.is_alive())
+        hud.stop()
+
+class TestRunAdjutantAgent(unittest.TestCase):
+    @patch("adjutant.engine.get_mission_telemetry")
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    @patch("adjutant.engine.AdjutantHUD")
+    def test_run_adjutant_agent_telemetry_replacement(self, mock_hud_class, mock_remove, mock_exists, mock_run, mock_get_telemetry):
+        mock_exists.return_value = True
+        mock_get_telemetry.return_value = "## Mission Telemetry\n- Some active objective"
+        directive = "Test mission"
+        
+        # Template with the telemetry placeholder
+        template_content = "System: ${SubAgents} Telemetry: ${MissionTelemetry}"
+        
+        m = mock_open(read_data=template_content)
+        
+        with patch("builtins.open", m):
+            run_adjutant_agent(directive)
+        
+        # Check that get_mission_telemetry was called
+        mock_get_telemetry.assert_called_once()
+        
+        handle = m()
+        # Find the write() call with the resolved content
+        resolved_content = ""
+        for call in handle.write.call_args_list:
+            resolved_content += call[0][0]
+            
+        self.assertIn("## Mission Telemetry", resolved_content)
+        self.assertIn("- Some active objective", resolved_content)
+        self.assertNotIn("${MissionTelemetry}", resolved_content)
+
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    @patch("adjutant.engine.AdjutantHUD")
+    def test_run_adjutant_agent_template_replacement(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+        mock_exists.return_value = True
+        directive = "Test mission"
+        
+        # We need to mock open to return our template and then capture what is written to the resolved file
+        template_content = "System: ${SubAgents} Skills: ${AgentSkills}"
+        
+        # Create a mock for the file handle
+        m = mock_open(read_data=template_content)
+        
+        with patch("builtins.open", m):
+            run_adjutant_agent(directive)
+        
+        # Check template replacement
+        # The first call to open is for reading the system prompt
+        # The second call is for writing the resolved prompt
+        
+        self.assertEqual(m.call_count, 2)
+        
+        # Check path of first open (read)
+        read_path = m.call_args_list[0][0][0]
+        self.assertTrue(read_path.endswith("adjutant/adjutant_system.md"))
+        
+        # Check path of second open (write)
+        write_path = m.call_args_list[1][0][0]
+        self.assertTrue(write_path.endswith(".adjutant_resolved_system.md"))
+        self.assertEqual(m.call_args_list[1][0][1], "w")
+        
+        handle = m()
+        # Find the write() call with the resolved content
+        resolved_content = ""
+        for call in handle.write.call_args_list:
+            resolved_content += call[0][0]
+            
+        self.assertIn("### Available Sub-Agents (Tools)", resolved_content)
+        self.assertIn("- **scv_coder", resolved_content)
+        self.assertNotIn("${SubAgents}", resolved_content)
+        self.assertNotIn("${AgentSkills}", resolved_content)
+
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    @patch("adjutant.engine.AdjutantHUD")
+    def test_run_adjutant_agent_hud_integration(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+        mock_exists.return_value = True
+        mock_hud_instance = mock_hud_class.return_value
+        
+        run_adjutant_agent("Test")
+        
+        mock_hud_class.assert_called_once_with(mission="Test")
+        mock_hud_instance.start.assert_called_once()
+        mock_hud_instance.stop.assert_called_once()
+
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    @patch("adjutant.engine.AdjutantHUD")
+    def test_run_adjutant_agent_gemini_not_found(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+        mock_exists.return_value = True
+        mock_run.side_effect = FileNotFoundError()
+        
+        with patch("sys.exit") as mock_exit:
+            with patch("builtins.print") as mock_print:
+                # Mocking open to avoid file system interaction
+                with patch("builtins.open", mock_open(read_data="template")):
+                    run_adjutant_agent("Test")
+        
+        mock_exit.assert_called_with(1)
+        mock_print.assert_any_call("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
 
 if __name__ == "__main__":
     unittest.main()

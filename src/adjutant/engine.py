@@ -2,8 +2,8 @@ import os
 import subprocess
 import sys
 import threading
-import time
 import json
+from .hooks import get_mission_telemetry
 
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
@@ -58,7 +58,7 @@ def run_adjutant_agent(initial_directive: str):
     Launches the Adjutant (Planner) agent as an interactive Gemini session.
     The Adjutant's specialized persona is injected via GEMINI_SYSTEM_MD.
     """
-    print(f"\n[Adjutant Online: Initiating Mission Planning]")
+    print("\n[Adjutant Online: Initiating Mission Planning]")
     
     # Resolve the path to the Adjutant's system prompt
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +80,10 @@ def run_adjutant_agent(initial_directive: str):
     # Simple template replacement
     system_prompt = system_prompt.replace("${SubAgents}", sub_agents_doc)
     system_prompt = system_prompt.replace("${AgentSkills}", "") # Reserved for future use
+    
+    # Get and inject mission telemetry
+    telemetry = get_mission_telemetry()
+    system_prompt = system_prompt.replace("${MissionTelemetry}", telemetry)
 
     # Write the resolved prompt to a temporary file for the session
     temp_prompt_path = os.path.join(base_dir, ".adjutant_resolved_system.md")
