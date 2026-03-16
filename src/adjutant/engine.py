@@ -128,8 +128,16 @@ def spawn_agent(agent_name: str, objective_id: str):
     # Policy directory for the specific agent
     policy_dir = os.path.join(agent_dir, "policies")
     
-    # Launch gemini headless asynchronously with the agent's policy
-    cmd = ["gemini", "--yolo", "--sandbox", "-p", prompt]
+    # Launch gemini headless asynchronously, with a fallback chain for quota limits
+    bash_script = (
+        'for model in "gemini-3.1-pro-preview" "gemini-3-flash-preview" "gemini-2.5-flash-lite"; do '
+        'echo "--- Spawning sub-agent with model: $model ---"; '
+        'gemini --model "$model" --yolo --sandbox -p "$1" && exit 0; '
+        'echo "\\n[!] Model $model failed. Trying next fallback..."; '
+        'done; '
+        'echo "\\n[!] All fallback models exhausted."; exit 1'
+    )
+    cmd = ["bash", "-c", bash_script, "_", prompt]
     
     # We use a context manager to open the file, but Popen will inherit the FD.
     log_file = open(log_path, "w")

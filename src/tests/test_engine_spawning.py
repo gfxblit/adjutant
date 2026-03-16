@@ -41,10 +41,11 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen):
     
     # Extract command from args
     cmd = args[0]
-    assert cmd[0] == "gemini"
-    assert cmd[1] == "--yolo"
-    assert cmd[2] == "--sandbox"
-    assert cmd[3] == "-p"
+    assert cmd[0] == "bash"
+    assert cmd[1] == "-c"
+    assert "for model in" in cmd[2]
+    assert "gemini-3.1-pro-preview" in cmd[2]
+    assert cmd[3] == "_"
     assert cmd[4] == f"Coder Prompt for {objective_id}"
     
     # Verify redirection and detaching
@@ -79,10 +80,10 @@ def test_spawn_agent_scv_tester(mock_exists, mock_makedirs, mock_popen):
     
     # Extract command from args
     cmd = args[0]
-    assert cmd[0] == "gemini"
-    assert cmd[1] == "--yolo"
-    assert cmd[2] == "--sandbox"
-    assert cmd[3] == "-p"
+    assert cmd[0] == "bash"
+    assert cmd[1] == "-c"
+    assert "for model in" in cmd[2]
+    assert cmd[3] == "_"
     assert cmd[4] == f"Tester Prompt for {objective_id}"
 
 def test_spawn_agent_invalid_name():
