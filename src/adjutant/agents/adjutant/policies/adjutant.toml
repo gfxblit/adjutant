@@ -1,0 +1,35 @@
+[[rule]]
+name = "Allow Adjutant to use adjutant CLI"
+toolName = "run_shell_command"
+commandPrefix = "adjutant"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow Adjutant to use Beads CLI"
+toolName = "run_shell_command"
+commandPrefix = "bd"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow Adjutant to use echo"
+toolName = "run_shell_command"
+commandPrefix = "echo"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow Adjutant mission setup scripts"
+description = "Allows variable assignment and compound commands involving bd and echo"
+toolName = "run_shell_command"
+commandRegex = "^[A-Z_]+=\\$\\(bd .*\\).*"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow Adjutant to read telemetry and logs"
+toolName = "read_file"
+filePathPattern = ".beads/**"
+decision = "allow"
+priority = 100

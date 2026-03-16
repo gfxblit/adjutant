@@ -140,7 +140,7 @@ class TestRunAdjutantAgent(unittest.TestCase):
         
         # Check path of first open (read)
         read_path = m.call_args_list[0][0][0]
-        self.assertTrue(read_path.endswith("adjutant/adjutant_system.md"))
+        self.assertTrue(read_path.endswith("adjutant/agents/adjutant/system.md"))
         
         # Check path of second open (write)
         write_path = m.call_args_list[1][0][0]

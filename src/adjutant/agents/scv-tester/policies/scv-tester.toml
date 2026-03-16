@@ -1,0 +1,55 @@
+[[rule]]
+name = "Allow SCV-Tester to use Beads CLI"
+toolName = "run_shell_command"
+commandPrefix = "bd"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow SCV-Tester to read telemetry and logs"
+toolName = "read_file"
+filePathPattern = ".beads/**"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow general shell commands"
+toolName = "run_shell_command"
+decision = "allow"
+priority = 10
+
+[[rule]]
+name = "Allow reading files"
+toolName = "read_file"
+decision = "allow"
+priority = 10
+
+[[rule]]
+name = "Allow writing files"
+toolName = "write_file"
+decision = "allow"
+priority = 10
+
+[[rule]]
+name = "Allow replacing content"
+toolName = "replace"
+decision = "allow"
+priority = 10
+
+[[rule]]
+name = "Allow grep search"
+toolName = "grep_search"
+decision = "allow"
+priority = 10
+
+[[rule]]
+name = "Allow glob search"
+toolName = "glob"
+decision = "allow"
+priority = 10
+
+[[rule]]
+name = "Allow listing directories"
+toolName = "list_directory"
+decision = "allow"
+priority = 10

@@ -3,7 +3,6 @@ import subprocess
 import sys
 import threading
 import json
-from .prompts import SCV_CODER_PROMPT, SCV_TESTER_PROMPT
 
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
@@ -62,7 +61,8 @@ def run_adjutant_agent(initial_directive: str):
     
     # Resolve the path to the Adjutant's system prompt
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    system_prompt_path = os.path.join(base_dir, "adjutant", "adjutant_system.md")
+    adjutant_agent_dir = os.path.join(base_dir, "adjutant", "agents", "adjutant")
+    system_prompt_path = os.path.join(adjutant_agent_dir, "system.md")
     
     # Read the base system prompt
     with open(system_prompt_path, "r") as f:
@@ -77,8 +77,11 @@ def run_adjutant_agent(initial_directive: str):
     env = os.environ.copy()
     env["GEMINI_SYSTEM_MD"] = temp_prompt_path
     
-    # Launch gemini in interactive mode (-i) with the initial directive
-    cmd = ["gemini", "-i", initial_directive]
+    # Policy directory for the main Adjutant agent
+    policy_dir = os.path.join(adjutant_agent_dir, "policies")
+    
+    # Launch gemini in interactive mode (-i) with the initial directive, policy, and model
+    cmd = ["gemini", "--model", "gemini-3.1-pro-preview", "--policy", policy_dir, "-i", initial_directive]
     
     # Initialize and start the Parallel HUD
     hud = AdjutantHUD(mission=initial_directive)
@@ -103,31 +106,32 @@ def spawn_agent(agent_name: str, objective_id: str):
     """
     Spawns a sub-agent asynchronously.
     """
-    prompts = {
-        "scv-coder": SCV_CODER_PROMPT,
-        "scv-tester": SCV_TESTER_PROMPT,
-    }
+    # Resolve paths
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    agent_dir = os.path.join(base_dir, "adjutant", "agents", agent_name)
+    system_prompt_path = os.path.join(agent_dir, "system.md")
     
-    if agent_name not in prompts:
-        raise ValueError(f"Unknown agent name: {agent_name}")
+    if not os.path.exists(system_prompt_path):
+        raise ValueError(f"Unknown agent or missing system prompt: {agent_name}")
+
+    with open(system_prompt_path, "r") as f:
+        prompt_template = f.read()
     
-    prompt_template = prompts[agent_name]
     prompt = prompt_template.format(objective_id=objective_id)
     
-    # Resolve project root to find .beads directory
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     project_root = os.path.dirname(base_dir)
     telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
     os.makedirs(telemetry_dir, exist_ok=True)
     
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
     
-    # Launch gemini headless asynchronously
-    cmd = ["gemini", "-p", prompt]
+    # Policy directory for the specific agent
+    policy_dir = os.path.join(agent_dir, "policies")
+    
+    # Launch gemini headless asynchronously with the agent's policy
+    cmd = ["gemini", "--yolo", "--sandbox", "-p", prompt]
     
     # We use a context manager to open the file, but Popen will inherit the FD.
-    # On Unix-like systems, the child process keeps the file descriptor open 
-    # even after the parent closes its file object, as long as it's not O_CLOEXEC.
     log_file = open(log_path, "w")
     subprocess.Popen(
         cmd,
@@ -135,9 +139,6 @@ def spawn_agent(agent_name: str, objective_id: str):
         stderr=log_file,
         start_new_session=True
     )
-    # We should not close log_file here immediately if we want to be safe, 
-    # but Popen should have duplicated it. 
-    # However, to be absolutely sure and avoid leaks in the parent, we can close it.
     log_file.close()
 
     print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
