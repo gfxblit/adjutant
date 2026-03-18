@@ -165,7 +165,7 @@ def spawn_agent(agent_name: str, objective_id: str):
     bash_script = (
         'for model in "gemini-3.1-pro-preview" "gemini-3-flash-preview" "gemini-2.5-flash-lite"; do '
         'echo "--- Spawning sub-agent with model: $model ---"; '
-        f'gemini --model "$model" --policy "{policy_dir}" --workspace . --workspace .beads --yolo --sandbox -p "$1" && exit 0; '
+        f'gemini --model "$model" --policy "{policy_dir}" --include-directories . --include-directories .beads --yolo --sandbox -p "$1" && exit 0; '
         'echo "\\n[!] Model $model failed. Trying next fallback..."; '
         'done; '
         'echo "\\n[!] All fallback models exhausted."; exit 1'
