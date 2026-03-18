@@ -114,39 +114,93 @@ def spawn_agent(agent_name: str, objective_id: str):
     if not os.path.exists(system_prompt_path):
         raise ValueError(f"Unknown agent or missing system prompt: {agent_name}")
 
+    # Read the agent's system prompt and create a resolved temporary version
     with open(system_prompt_path, "r") as f:
         prompt_template = f.read()
     
     prompt = prompt_template.format(objective_id=objective_id)
     
     project_root = os.path.dirname(base_dir)
+
+    # Create isolated git worktree for the SCV
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    os.makedirs(worktrees_dir, exist_ok=True)
+    worktree_path = os.path.join(worktrees_dir, objective_id)
+    branch_name = f"scv/{objective_id}"
+
+    # Prepare environment for the sub-agent
+    env = os.environ.copy()
+    
+    # We resolve the system prompt and save it in the worktree so the sub-agent uses it
+    resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
+    with open(resolved_system_prompt_path, "w") as f:
+        f.write(prompt)
+    
+    env["GEMINI_SYSTEM_MD"] = resolved_system_prompt_path
+
+    policy_dir = os.path.join(agent_dir, "policies")
+
+    try:
+        subprocess.run(
+            ["git", "worktree", "add", "-b", branch_name, worktree_path],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print(f"Created worktree at {worktree_path} on branch {branch_name}")
+    except subprocess.CalledProcessError as e:
+        # If branch or worktree already exists, it might be a retry.
+        if "already exists" in e.stderr or "already exists" in e.stdout:
+            print(f"Worktree or branch already exists for {objective_id}. Proceeding.")
+        else:
+            raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
+
     telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
     os.makedirs(telemetry_dir, exist_ok=True)
     
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
     
-    # Policy directory for the specific agent
-    policy_dir = os.path.join(agent_dir, "policies")
-    
     # Launch gemini headless asynchronously, with a fallback chain for quota limits
     bash_script = (
         'for model in "gemini-3.1-pro-preview" "gemini-3-flash-preview" "gemini-2.5-flash-lite"; do '
         'echo "--- Spawning sub-agent with model: $model ---"; '
-        'gemini --model "$model" --yolo --sandbox -p "$1" && exit 0; '
+        f'gemini --model "$model" --policy "{policy_dir}" --workspace . --workspace .beads --yolo --sandbox -p "$1" && exit 0; '
         'echo "\\n[!] Model $model failed. Trying next fallback..."; '
         'done; '
         'echo "\\n[!] All fallback models exhausted."; exit 1'
     )
-    cmd = ["bash", "-c", bash_script, "_", prompt]
+    cmd = ["bash", "-c", bash_script, "_", "Execute mission."]
     
     # We use a context manager to open the file, but Popen will inherit the FD.
     log_file = open(log_path, "w")
-    subprocess.Popen(
+    process = subprocess.Popen(
         cmd,
         stdout=log_file,
         stderr=log_file,
+        cwd=worktree_path,
+        env=env,
         start_new_session=True
     )
     log_file.close()
+
+    # Update active SCV registry
+    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
+    try:
+        if os.path.exists(registry_path):
+            with open(registry_path, "r") as f:
+                registry = json.load(f)
+        else:
+            registry = {}
+    except (json.JSONDecodeError, IOError):
+        registry = {}
+    
+    registry[objective_id] = {
+        "pid": process.pid,
+        "agent_name": agent_name
+    }
+    
+    with open(registry_path, "w") as f:
+        json.dump(registry, f, indent=2)
 
     print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
