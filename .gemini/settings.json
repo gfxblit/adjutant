@@ -2,7 +2,13 @@
   "hooks": {
     "BeforeAgent": [
       {
-        "command": "PYTHONPATH=src python -m adjutant.hooks"
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PYTHONPATH=src python -m adjutant.hooks"
+          }
+        ]
       }
     ]
   }

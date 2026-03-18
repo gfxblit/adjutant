@@ -21,7 +21,7 @@ def get_mission_telemetry():
         closed_output = subprocess.check_output(["bd", "list", "--status", "closed", "--json"], stderr=subprocess.DEVNULL)
         closed_objectives = json.loads(closed_output)
         # Sort by closed_at descending if available, otherwise just take last 5
-        closed_objectives.sort(key=lambda x: x.get("closed_at", ""), reverse=True)
+        closed_objectives.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
         recent_closed = closed_objectives[:5]
         
         telemetry = "## Mission Telemetry\n\n"
