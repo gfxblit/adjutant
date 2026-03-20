@@ -120,7 +120,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("os.path.exists")
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
-    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.SCVOverseer")
+    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         directive = "Test mission"
         
@@ -160,7 +161,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("os.path.exists")
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
-    def test_run_adjutant_agent_hud_integration(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.SCVOverseer")
+    def test_run_adjutant_agent_hud_integration(self, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         mock_hud_instance = mock_hud_class.return_value
         
@@ -174,7 +176,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("os.path.exists")
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
-    def test_run_adjutant_agent_gemini_not_found(self, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.SCVOverseer")
+    def test_run_adjutant_agent_gemini_not_found(self, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         mock_run.side_effect = FileNotFoundError()
         

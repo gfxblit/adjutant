@@ -25,7 +25,6 @@ class AdjutantHUD:
             progress = (closed_issues / total * 100) if total > 0 else 0
             
             # Format title string
-            # Title: Mission: {MISSION} | {PROGRESS}% | Open: {OPEN}, Closed: {CLOSED}
             title = f"Mission: {self.mission} | {progress:.1f}% | Open: {open_issues}, Closed: {closed_issues}"
             
             # Update terminal title using ANSI escape sequence
@@ -36,8 +35,11 @@ class AdjutantHUD:
             pass
 
     def _run(self):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_root = os.path.dirname(base_dir)
         while not self.stop_event.is_set():
             self.update_hud()
+            monitor_scvs(project_root)
             # Wait for interval or until stop_event is set
             self.stop_event.wait(self.interval)
 
@@ -52,40 +54,219 @@ class AdjutantHUD:
             self.stop_event.set()
             self.thread.join(timeout=1.0)
 
+
+class SCVOverseer:
+    MODELS = ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-flash-lite"]
+
+    def __init__(self, interval: int = 10):
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.thread = None
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.project_root = os.path.dirname(self.base_dir)
+        self.telemetry_dir = os.path.join(self.project_root, ".beads", "telemetry")
+        self.registry_path = os.path.join(self.telemetry_dir, "active_scvs.json")
+
+    def _is_process_running(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except Exception:
+            # If we lack permission or hit other errors, assume it might be running
+            return True
+
+    def _check_scvs(self):
+        if not os.path.exists(self.registry_path):
+            return
+
+        try:
+            with open(self.registry_path, "r") as f:
+                registry = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return
+
+        updated_registry = False
+        active_registry = {}
+
+        for objective_id, scv_info in registry.items():
+            pid = scv_info.get("pid")
+            agent_name = scv_info.get("agent_name")
+            
+            if pid and not self._is_process_running(pid):
+                log_path = os.path.join(self.telemetry_dir, f"{objective_id}.log")
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, "r") as f:
+                            log_content = f.read()
+                        
+                        current_model = scv_info.get("model", self.MODELS[0])
+                        # Detect capacity or quota errors
+                        if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED"]):
+                            print(f"\n[Overseer] Detected capacity crash for SCV {objective_id} ({current_model}). Restarting with fallback model.")
+                            
+                            next_model = None
+                            try:
+                                current_idx = self.MODELS.index(current_model)
+                                if current_idx + 1 < len(self.MODELS):
+                                    next_model = self.MODELS[current_idx + 1]
+                            except ValueError:
+                                next_model = self.MODELS[1] # fallback to flash
+                            
+                            if next_model:
+                                spawn_agent(agent_name, objective_id, starting_model=next_model)
+                                updated_registry = True
+                                continue
+                            else:
+                                print(f"[Overseer] All fallback models exhausted for {objective_id}.")
+                    except IOError:
+                        pass
+                
+                updated_registry = True
+            else:
+                active_registry[objective_id] = scv_info
+                
+        if updated_registry:
+            try:
+                with open(self.registry_path, "w") as f:
+                    json.dump(active_registry, f, indent=2)
+            except IOError:
+                pass
+
+    def _run(self):
+        while not self.stop_event.is_set():
+            self._check_scvs()
+            self.stop_event.wait(self.interval)
+
+    def start(self):
+        if self.thread is None or not self.thread.is_alive():
+            self.stop_event.clear()
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+
+    def stop(self):
+        if self.thread:
+            self.stop_event.set()
+            self.thread.join(timeout=1.0)
+
+
+def cleanup_scv(objective_id: str, project_root: str):
+    """
+    Cleans up the git worktree and pushes the branch to origin.
+    """
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    worktree_path = os.path.join(worktrees_dir, objective_id)
+    branch_name = f"scv/{objective_id}"
+    resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
+
+    print(f"\n[Cleaning up SCV for {objective_id}]")
+
+    # 1. Push the branch
+    try:
+        subprocess.run(
+            ["git", "push", "origin", branch_name],
+            cwd=project_root,
+            check=False,
+            capture_output=True,
+            text=True
+        )
+        print(f"Pushed branch {branch_name} to origin.")
+    except Exception as e:
+        print(f"Failed to push branch {branch_name}: {e}")
+
+    # 2. Cleanup worktree
+    if os.path.exists(worktree_path):
+        try:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", worktree_path],
+                cwd=project_root,
+                check=False,
+                capture_output=True,
+                text=True
+            )
+            print(f"Removed worktree at {worktree_path}")
+        except Exception as e:
+            print(f"Failed to remove worktree {worktree_path}: {e}")
+
+    # 3. Cleanup resolved system prompt
+    if os.path.exists(resolved_system_prompt_path):
+        try:
+            os.remove(resolved_system_prompt_path)
+            print(f"Removed resolved system prompt: {resolved_system_prompt_path}")
+        except Exception as e:
+            print(f"Failed to remove resolved system prompt: {e}")
+
+
+def monitor_scvs(project_root: str):
+    """
+    Monitors active SCVs and triggers cleanup when they finish.
+    """
+    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
+    
+    if not os.path.exists(registry_path):
+        return
+
+    try:
+        with open(registry_path, "r") as f:
+            registry = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return
+
+    updated = False
+    finished_objectives = []
+    
+    for objective_id, info in registry.items():
+        pid = info.get("pid")
+        if pid:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                # PID is dead!
+                finished_objectives.append(objective_id)
+                updated = True
+    
+    for objective_id in finished_objectives:
+        cleanup_scv(objective_id, project_root)
+        del registry[objective_id]
+        
+    if updated:
+        try:
+            with open(registry_path, "w") as f:
+                json.dump(registry, f, indent=2)
+        except IOError:
+            pass
+
+
 def run_adjutant_agent(initial_directive: str):
     """
     Launches the Adjutant (Planner) agent as an interactive Gemini session.
-    The Adjutant's specialized persona is injected via GEMINI_SYSTEM_MD.
     """
     print("\n[Adjutant Online: Initiating Mission Planning]")
     
-    # Resolve the path to the Adjutant's system prompt
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     adjutant_agent_dir = os.path.join(base_dir, "adjutant", "agents", "adjutant")
     system_prompt_path = os.path.join(adjutant_agent_dir, "system.md")
     
-    # Read the base system prompt
     with open(system_prompt_path, "r") as f:
         system_prompt = f.read()
 
-    # Write the resolved prompt to a temporary file for the session
     temp_prompt_path = os.path.join(base_dir, ".adjutant_resolved_system.md")
     with open(temp_prompt_path, "w") as f:
         f.write(system_prompt)
     
-    # Configure the environment to override the system prompt
     env = os.environ.copy()
     env["GEMINI_SYSTEM_MD"] = temp_prompt_path
     
-    # Policy directory for the main Adjutant agent
     policy_dir = os.path.join(adjutant_agent_dir, "policies")
-    
-    # Launch gemini in interactive mode (-i) with the initial directive, policy, and model
     cmd = ["gemini", "--model", "gemini-3.1-pro-preview", "--policy", policy_dir, "-i", initial_directive]
     
-    # Initialize and start the Parallel HUD
     hud = AdjutantHUD(mission=initial_directive)
     hud.start()
+
+    overseer = SCVOverseer()
+    overseer.start()
     
     try:
         subprocess.run(cmd, env=env, check=False)
@@ -96,17 +277,16 @@ def run_adjutant_agent(initial_directive: str):
         print(f"Error launching Adjutant: {e}")
         sys.exit(1)
     finally:
-        # Stop the HUD thread
         hud.stop()
-        # Clean up the temporary prompt
+        overseer.stop()
         if os.path.exists(temp_prompt_path):
             os.remove(temp_prompt_path)
 
-def spawn_agent(agent_name: str, objective_id: str):
+
+def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None):
     """
     Spawns a sub-agent asynchronously.
     """
-    # Resolve paths
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     agent_dir = os.path.join(base_dir, "adjutant", "agents", agent_name)
     system_prompt_path = os.path.join(agent_dir, "system.md")
@@ -114,30 +294,23 @@ def spawn_agent(agent_name: str, objective_id: str):
     if not os.path.exists(system_prompt_path):
         raise ValueError(f"Unknown agent or missing system prompt: {agent_name}")
 
-    # Read the agent's system prompt and create a resolved temporary version
     with open(system_prompt_path, "r") as f:
         prompt_template = f.read()
     
     prompt = prompt_template.format(objective_id=objective_id)
-    
     project_root = os.path.dirname(base_dir)
 
-    # Create isolated git worktree for the SCV
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     os.makedirs(worktrees_dir, exist_ok=True)
     worktree_path = os.path.join(worktrees_dir, objective_id)
     branch_name = f"scv/{objective_id}"
 
-    # Prepare environment for the sub-agent
     env = os.environ.copy()
-    
-    # We resolve the system prompt and save it in the worktree so the sub-agent uses it
     resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
     with open(resolved_system_prompt_path, "w") as f:
         f.write(prompt)
     
     env["GEMINI_SYSTEM_MD"] = resolved_system_prompt_path
-
     policy_dir = os.path.join(agent_dir, "policies")
 
     try:
@@ -150,7 +323,6 @@ def spawn_agent(agent_name: str, objective_id: str):
         )
         print(f"Created worktree at {worktree_path} on branch {branch_name}")
     except subprocess.CalledProcessError as e:
-        # If branch or worktree already exists, it might be a retry.
         if "already exists" in e.stderr or "already exists" in e.stdout:
             print(f"Worktree or branch already exists for {objective_id}. Proceeding.")
         else:
@@ -158,22 +330,35 @@ def spawn_agent(agent_name: str, objective_id: str):
 
     telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
     os.makedirs(telemetry_dir, exist_ok=True)
-    
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
     
-    # Launch gemini headless asynchronously, with a fallback chain for quota limits
-    bash_script = (
-        'for model in "gemini-3.1-pro-preview" "gemini-3-flash-preview" "gemini-2.5-flash-lite"; do '
-        'echo "--- Spawning sub-agent with model: $model ---"; '
-        f'gemini --model "$model" --policy "{policy_dir}" --include-directories . --include-directories .beads --yolo --sandbox -p "$1" && exit 0; '
-        'echo "\\n[!] Model $model failed. Trying next fallback..."; '
-        'done; '
-        'echo "\\n[!] All fallback models exhausted."; exit 1'
-    )
-    cmd = ["bash", "-c", bash_script, "_", "Execute mission."]
+    # Resolve Git metadata for sandboxing
+    try:
+        git_common_dir = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=project_root, text=True).strip()
+        git_dir = subprocess.check_output(["git", "rev-parse", "--git-dir"], cwd=worktree_path, text=True).strip()
+        git_common_dir = os.path.abspath(os.path.join(project_root, git_common_dir))
+        git_dir = os.path.abspath(os.path.join(worktree_path, git_dir))
+    except Exception:
+        git_common_dir = os.path.join(project_root, ".git")
+        git_dir = os.path.join(worktree_path, ".git")
+
+    model = starting_model or "gemini-3.1-pro-preview"
+    print(f"--- Spawning sub-agent with model: {model} ---")
     
-    # We use a context manager to open the file, but Popen will inherit the FD.
-    log_file = open(log_path, "w")
+    cmd = [
+        "gemini", 
+        "--model", model, 
+        "--policy", policy_dir, 
+        "--include-directories", project_root, 
+        "--include-directories", os.path.join(project_root, ".beads"), 
+        "--include-directories", git_common_dir,
+        "--include-directories", git_dir,
+        "--yolo", 
+        "--sandbox", 
+        "-p", "Execute mission."
+    ]
+    
+    log_file = open(log_path, "a")
     process = subprocess.Popen(
         cmd,
         stdout=log_file,
@@ -184,7 +369,6 @@ def spawn_agent(agent_name: str, objective_id: str):
     )
     log_file.close()
 
-    # Update active SCV registry
     registry_path = os.path.join(telemetry_dir, "active_scvs.json")
     try:
         if os.path.exists(registry_path):
@@ -197,7 +381,8 @@ def spawn_agent(agent_name: str, objective_id: str):
     
     registry[objective_id] = {
         "pid": process.pid,
-        "agent_name": agent_name
+        "agent_name": agent_name,
+        "model": model
     }
     
     with open(registry_path, "w") as f:

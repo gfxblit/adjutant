@@ -37,19 +37,17 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run)
 
     # Third call: write log file
     assert m.call_args_list[2][0][0].endswith(f"{objective_id}.log")
-    assert m.call_args_list[2][0][1] == "w"    
-    # Verify subprocess call
+    assert m.call_args_list[2][0][1] == "a"    # Verify subprocess call
     mock_popen.assert_called_once()
     args, kwargs = mock_popen.call_args
     
     # Extract command from args
     cmd = args[0]
-    assert cmd[0] == "bash"
-    assert cmd[1] == "-c"
-    assert "for model in" in cmd[2]
-    assert "gemini-3.1-pro-preview" in cmd[2]
-    assert cmd[3] == "_"
-    assert cmd[4] == "Execute mission."
+    assert cmd[0] == "gemini"
+    assert "--model" in cmd
+    assert "gemini-3.1-pro-preview" in cmd
+    assert "-p" in cmd
+    assert "Execute mission." in cmd
 
     # Verify cwd is set to worktree
     assert kwargs.get("cwd", "").endswith(f"worktrees/{objective_id}")
@@ -91,11 +89,11 @@ def test_spawn_agent_scv_tester(mock_exists, mock_makedirs, mock_popen, mock_run
     
     # Extract command from args
     cmd = args[0]
-    assert cmd[0] == "bash"
-    assert cmd[1] == "-c"
-    assert "for model in" in cmd[2]
-    assert cmd[3] == "_"
-    assert cmd[4] == "Execute mission."
+    assert cmd[0] == "gemini"
+    assert "--model" in cmd
+    assert "gemini-3.1-pro-preview" in cmd
+    assert "-p" in cmd
+    assert "Execute mission." in cmd
 
     # Verify environment variables
     env = kwargs.get("env", {})
