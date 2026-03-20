@@ -35,11 +35,8 @@ class AdjutantHUD:
             pass
 
     def _run(self):
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        project_root = os.path.dirname(base_dir)
         while not self.stop_event.is_set():
             self.update_hud()
-            monitor_scvs(project_root)
             # Wait for interval or until stop_event is set
             self.stop_event.wait(self.interval)
 
@@ -96,6 +93,8 @@ class SCVOverseer:
             
             if pid and not self._is_process_running(pid):
                 log_path = os.path.join(self.telemetry_dir, f"{objective_id}.log")
+                should_cleanup = True
+
                 if os.path.exists(log_path):
                     try:
                         with open(log_path, "r") as f:
@@ -103,7 +102,7 @@ class SCVOverseer:
                         
                         current_model = scv_info.get("model", self.MODELS[0])
                         # Detect capacity or quota errors
-                        if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED"]):
+                        if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED", "TerminalQuotaError"]):
                             print(f"\n[Overseer] Detected capacity crash for SCV {objective_id} ({current_model}). Restarting with fallback model.")
                             
                             next_model = None
@@ -117,20 +116,34 @@ class SCVOverseer:
                             if next_model:
                                 spawn_agent(agent_name, objective_id, starting_model=next_model)
                                 updated_registry = True
+                                # spawn_agent updates the registry file directly
                                 continue
                             else:
                                 print(f"[Overseer] All fallback models exhausted for {objective_id}.")
                     except IOError:
                         pass
                 
-                updated_registry = True
+                if should_cleanup:
+                    cleanup_scv(objective_id, self.project_root)
+                    updated_registry = True
             else:
                 active_registry[objective_id] = scv_info
                 
         if updated_registry:
             try:
+                # Reload registry to ensure we don't overwrite new spawns
+                if os.path.exists(self.registry_path):
+                    with open(self.registry_path, "r") as f:
+                        latest_registry = json.load(f)
+                    latest_registry.update(active_registry)
+                    # Remove only the ones we intended to remove
+                    for obj_id in [k for k in latest_registry if k not in active_registry and k in registry]:
+                         del latest_registry[obj_id]
+                else:
+                    latest_registry = active_registry
+
                 with open(self.registry_path, "w") as f:
-                    json.dump(active_registry, f, indent=2)
+                    json.dump(latest_registry, f, indent=2)
             except IOError:
                 pass
 
@@ -196,47 +209,6 @@ def cleanup_scv(objective_id: str, project_root: str):
             print(f"Removed resolved system prompt: {resolved_system_prompt_path}")
         except Exception as e:
             print(f"Failed to remove resolved system prompt: {e}")
-
-
-def monitor_scvs(project_root: str):
-    """
-    Monitors active SCVs and triggers cleanup when they finish.
-    """
-    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
-    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
-    
-    if not os.path.exists(registry_path):
-        return
-
-    try:
-        with open(registry_path, "r") as f:
-            registry = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return
-
-    updated = False
-    finished_objectives = []
-    
-    for objective_id, info in registry.items():
-        pid = info.get("pid")
-        if pid:
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                # PID is dead!
-                finished_objectives.append(objective_id)
-                updated = True
-    
-    for objective_id in finished_objectives:
-        cleanup_scv(objective_id, project_root)
-        del registry[objective_id]
-        
-    if updated:
-        try:
-            with open(registry_path, "w") as f:
-                json.dump(registry, f, indent=2)
-        except IOError:
-            pass
 
 
 def run_adjutant_agent(initial_directive: str):
