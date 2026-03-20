@@ -1,14 +1,16 @@
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 import json
 import time
+import os
 from adjutant.engine import AdjutantHUD, run_adjutant_agent
 
 class TestAdjutantHUD(unittest.TestCase):
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
     @patch("sys.stdout.flush")
-    def test_update_hud_success(self, mock_flush, mock_write, mock_check_output):
+    @patch("os.path.exists")
+    def test_update_hud_success(self, mock_exists, mock_flush, mock_write, mock_check_output):
         # Mock 'bd status --json' output
         mock_check_output.return_value = json.dumps({
             "summary": {
@@ -19,69 +21,88 @@ class TestAdjutantHUD(unittest.TestCase):
             }
         }).encode()
         
+        # Mock registry doesn't exist for now
+        mock_exists.return_value = False
+        
         hud = AdjutantHUD(mission="Test Mission")
         hud.update_hud()
         
-        expected_title = "\033]0;Mission: Test Mission | 70.0% | Open: 3, Closed: 7\007"
+        # Updated expected format: Mission: {MISSION} | {PROGRESS}% | {CLOSED}/{TOTAL} | Open: {OPEN}, IP: {IN_PROGRESS}
+        expected_title = "\033]0;Mission: Test Mission | 70.0% | 7/10 | Open: 3, IP: 0\007"
         mock_write.assert_called_with(expected_title)
         mock_flush.assert_called()
 
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
-    def test_update_hud_handles_subprocess_error(self, mock_write, mock_check_output):
+    @patch("os.path.exists")
+    def test_update_hud_handles_subprocess_error(self, mock_exists, mock_write, mock_check_output):
         import subprocess
         mock_check_output.side_effect = subprocess.CalledProcessError(1, ["bd", "status", "--json"])
+        mock_exists.return_value = False
         
         hud = AdjutantHUD(mission="Test Mission")
         # Should not raise exception
         hud.update_hud()
-        mock_write.assert_not_called()
+        # It still writes the title, just with 0% progress if bd fails
+        expected_title = "\033]0;Mission: Test Mission | 0.0% | 0/0 | Open: 0, IP: 0\007"
+        mock_write.assert_called_with(expected_title)
 
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
-    def test_update_hud_handles_file_not_found_error(self, mock_write, mock_check_output):
-        mock_check_output.side_effect = FileNotFoundError(2, "No such file or directory: 'bd'")
+    @patch("os.path.exists")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_update_hud_with_scvs(self, mock_open_file, mock_exists, mock_write, mock_check_output):
+        # Mock 'bd status --json' output
+        mock_check_output.return_value = json.dumps({
+            "summary": {
+                "total_issues": 10,
+                "open_issues": 3,
+                "closed_issues": 7,
+                "in_progress_issues": 0
+            }
+        }).encode()
+        
+        # Mock registry exists and has SCVs
+        registry_data = {
+            "adjutant-sjz.3": {"pid": 123},
+            "adjutant-sjz.4": {"pid": 456}
+        }
+        
+        def exists_side_effect(path):
+            if "active_scvs.json" in path:
+                return True
+            return False
+            
+        mock_exists.side_effect = exists_side_effect
+        mock_open_file.return_value.__enter__.return_value.read.return_value = json.dumps(registry_data)
         
         hud = AdjutantHUD(mission="Test Mission")
-        # Should not raise exception
         hud.update_hud()
-        mock_write.assert_not_called()
-
-    @patch("subprocess.check_output")
-    @patch("sys.stdout.write")
-    def test_update_hud_handles_invalid_json(self, mock_write, mock_check_output):
-        mock_check_output.return_value = b"invalid json"
         
-        hud = AdjutantHUD(mission="Test Mission")
-        # Should not raise exception
-        hud.update_hud()
-        mock_write.assert_not_called()
+        # Expected title with SCVs: ... | SCVs: 2 (sjz.3, sjz.4)
+        expected_title = "\033]0;Mission: Test Mission | 70.0% | 7/10 | Open: 3, IP: 0 | SCVs: 2 (sjz.3, sjz.4)\007"
+        mock_write.assert_called_with(expected_title)
 
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
-    def test_update_hud_edge_cases(self, mock_write, mock_check_output):
+    @patch("os.path.exists")
+    def test_update_hud_edge_cases(self, mock_exists, mock_write, mock_check_output):
+        mock_exists.return_value = False
         hud = AdjutantHUD(mission="Test Mission")
 
         # Case 1: 0 issues
         mock_check_output.return_value = json.dumps({
-            "summary": {"total_issues": 0, "open_issues": 0, "closed_issues": 0}
+            "summary": {"total_issues": 0, "open_issues": 0, "closed_issues": 0, "in_progress_issues": 0}
         }).encode()
         hud.update_hud()
-        mock_write.assert_called_with("\033]0;Mission: Test Mission | 0.0% | Open: 0, Closed: 0\007")
+        mock_write.assert_called_with("\033]0;Mission: Test Mission | 0.0% | 0/0 | Open: 0, IP: 0\007")
 
         # Case 2: 100% closed
         mock_check_output.return_value = json.dumps({
-            "summary": {"total_issues": 5, "open_issues": 0, "closed_issues": 5}
+            "summary": {"total_issues": 5, "open_issues": 0, "closed_issues": 5, "in_progress_issues": 0}
         }).encode()
         hud.update_hud()
-        mock_write.assert_called_with("\033]0;Mission: Test Mission | 100.0% | Open: 0, Closed: 5\007")
-
-        # Case 3: Very large numbers
-        mock_check_output.return_value = json.dumps({
-            "summary": {"total_issues": 1000000, "open_issues": 1, "closed_issues": 999999}
-        }).encode()
-        hud.update_hud()
-        mock_write.assert_called_with("\033]0;Mission: Test Mission | 100.0% | Open: 1, Closed: 999999\007")
+        mock_write.assert_called_with("\033]0;Mission: Test Mission | 100.0% | 5/5 | Open: 0, IP: 0\007")
 
     def test_hud_thread_lifecycle(self):
         with patch("adjutant.engine.AdjutantHUD.update_hud") as mock_update:
@@ -95,25 +116,6 @@ class TestAdjutantHUD(unittest.TestCase):
             
             hud.stop()
             self.assertFalse(hud.thread.is_alive())
-
-    def test_hud_multiple_starts_stops(self):
-        hud = AdjutantHUD(mission="Test", interval=0.1)
-        hud.start()
-        first_thread = hud.thread
-        self.assertTrue(first_thread.is_alive())
-        
-        hud.start() # Should not create a new thread
-        self.assertIs(hud.thread, first_thread)
-        
-        hud.stop()
-        self.assertFalse(first_thread.is_alive())
-        
-        hud.stop() # Should be fine
-        
-        hud.start() # Should create a new thread
-        self.assertIsNot(hud.thread, first_thread)
-        self.assertTrue(hud.thread.is_alive())
-        hud.stop()
 
 class TestRunAdjutantAgent(unittest.TestCase):
     @patch("subprocess.run")

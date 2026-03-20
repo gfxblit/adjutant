@@ -4,34 +4,75 @@ import sys
 import threading
 import json
 
+_registry_lock = threading.Lock()
+
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
         self.mission = mission
         self.interval = interval
         self.stop_event = threading.Event()
         self.thread = None
+        # Find project root
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.project_root = os.path.dirname(base_dir)
+        self.registry_path = os.path.join(self.project_root, ".beads", "telemetry", "active_scvs.json")
 
     def update_hud(self):
         try:
-            # Run bd status --json
-            output = subprocess.check_output(["bd", "status", "--json"], stderr=subprocess.DEVNULL)
-            status_data = json.loads(output)
-            summary = status_data.get("summary", {})
+            # Default values if bd fails
+            progress = 0.0
+            open_issues = 0
+            closed_issues = 0
+            in_progress = 0
+            total = 0
             
-            total = summary.get("total_issues", 0)
-            open_issues = summary.get("open_issues", 0)
-            closed_issues = summary.get("closed_issues", 0)
+            # 1. Get Mission status from bd
+            try:
+                # Run bd status --json with a timeout
+                output = subprocess.check_output(["bd", "status", "--json"], stderr=subprocess.DEVNULL, timeout=2.0)
+                status_data = json.loads(output)
+                summary = status_data.get("summary", {})
+                
+                total = summary.get("total_issues", 0)
+                open_issues = summary.get("open_issues", 0)
+                closed_issues = summary.get("closed_issues", 0)
+                in_progress = summary.get("in_progress_issues", 0)
+                
+                progress = (closed_issues / total * 100) if total > 0 else 0
+            except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError, subprocess.TimeoutExpired):
+                # If bd fails, we just use defaults for mission status
+                pass
             
-            progress = (closed_issues / total * 100) if total > 0 else 0
-            
+            # 2. Get SCV status from telemetry registry
+            scv_count = 0
+            scv_list = []
+            if os.path.exists(self.registry_path):
+                with _registry_lock:
+                    try:
+                        with open(self.registry_path, "r") as f:
+                            registry = json.load(f)
+                            scv_count = len(registry)
+                            scv_list = sorted(list(registry.keys()))
+                    except (json.JSONDecodeError, IOError):
+                        pass
+
             # Format title string
-            title = f"Mission: {self.mission} | {progress:.1f}% | Open: {open_issues}, Closed: {closed_issues}"
+            # Title: Mission: {MISSION} | {PROGRESS}% | {CLOSED}/{TOTAL} | Open: {OPEN}, IP: {IN_PROGRESS}
+            title = f"Mission: {self.mission} | {progress:.1f}% | {closed_issues}/{total} | Open: {open_issues}, IP: {in_progress}"
+            
+            if scv_count > 0:
+                short_ids = [s.replace("adjutant-", "") for s in scv_list]
+                # Limit length of listed SCVs in the title bar
+                list_str = ", ".join(short_ids[:3])
+                if scv_count > 3:
+                    list_str += "..."
+                title += f" | SCVs: {scv_count} ({list_str})"
             
             # Update terminal title using ANSI escape sequence
             sys.stdout.write(f"\033]0;{title}\007")
             sys.stdout.flush()
         except Exception:
-            # Silently fail if something goes wrong during HUD update
+            # Silently fail for unexpected errors during HUD update
             pass
 
     def _run(self):
@@ -78,11 +119,12 @@ class SCVOverseer:
         if not os.path.exists(self.registry_path):
             return
 
-        try:
-            with open(self.registry_path, "r") as f:
-                registry = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return
+        with _registry_lock:
+            try:
+                with open(self.registry_path, "r") as f:
+                    registry = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                return
 
         updated_registry = False
         active_registry = {}
@@ -115,8 +157,8 @@ class SCVOverseer:
                             
                             if next_model:
                                 spawn_agent(agent_name, objective_id, starting_model=next_model)
-                                updated_registry = True
                                 # spawn_agent updates the registry file directly
+                                # so we just skip adding it to active_registry here
                                 continue
                             else:
                                 print(f"[Overseer] All fallback models exhausted for {objective_id}.")
@@ -130,26 +172,103 @@ class SCVOverseer:
                 active_registry[objective_id] = scv_info
                 
         if updated_registry:
-            try:
-                # Reload registry to ensure we don't overwrite new spawns
-                if os.path.exists(self.registry_path):
-                    with open(self.registry_path, "r") as f:
-                        latest_registry = json.load(f)
-                    latest_registry.update(active_registry)
-                    # Remove only the ones we intended to remove
-                    for obj_id in [k for k in latest_registry if k not in active_registry and k in registry]:
-                         del latest_registry[obj_id]
-                else:
-                    latest_registry = active_registry
+            with _registry_lock:
+                try:
+                    # Reload registry to ensure we don't overwrite new spawns
+                    if os.path.exists(self.registry_path):
+                        with open(self.registry_path, "r") as f:
+                            latest_registry = json.load(f)
+                        # Only keep the ones we still consider active
+                        # and combine with any new spawns that happened in between
+                        for obj_id in list(latest_registry.keys()):
+                            # If it was in our original registry but not in active_registry, it's done
+                            if obj_id in registry and obj_id not in active_registry:
+                                del latest_registry[obj_id]
+                    else:
+                        latest_registry = active_registry
 
-                with open(self.registry_path, "w") as f:
-                    json.dump(latest_registry, f, indent=2)
-            except IOError:
-                pass
+                    with open(self.registry_path, "w") as f:
+                        json.dump(latest_registry, f, indent=2)
+                except IOError:
+                    pass
 
     def _run(self):
         while not self.stop_event.is_set():
             self._check_scvs()
+            self.stop_event.wait(self.interval)
+
+    def start(self):
+        if self.thread is None or not self.thread.is_alive():
+            self.stop_event.clear()
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+
+    def stop(self):
+        if self.thread:
+            self.stop_event.set()
+            self.thread.join(timeout=1.0)
+
+
+class SyncOverseer:
+    def __init__(self, interval: int = 300): # 5 minutes
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.thread = None
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.project_root = os.path.dirname(base_dir)
+        self.registry_path = os.path.join(self.project_root, ".beads", "telemetry", "active_scvs.json")
+
+    def _check_sync(self):
+        try:
+            # 1. Fetch origin main to get latest state
+            subprocess.run(["git", "fetch", "origin", "main"], cwd=self.project_root, capture_output=True, check=False)
+            
+            # 2. Get list of open objectives from bd
+            output = subprocess.check_output(["bd", "list", "--json"], cwd=self.project_root, text=True)
+            objectives = json.loads(output)
+            
+            # 3. Get active SCVs to avoid spawning multiple agents for same objective
+            active_objectives = []
+            if os.path.exists(self.registry_path):
+                with _registry_lock:
+                    try:
+                        with open(self.registry_path, "r") as f:
+                            active_objectives = list(json.load(f).keys())
+                    except:
+                        pass
+
+            for obj in objectives:
+                obj_id = obj["id"]
+                if obj["status"] != "open" or obj_id in active_objectives:
+                    continue
+                
+                branch_name = f"scv/{obj_id}"
+                # Check if branch exists
+                res = subprocess.run(["git", "show-ref", "--verify", f"refs/heads/{branch_name}"], cwd=self.project_root, capture_output=True)
+                if res.returncode != 0:
+                    continue
+                
+                # Check if behind origin/main
+                res = subprocess.run(["git", "rev-list", "--count", f"{branch_name}..origin/main"], cwd=self.project_root, capture_output=True, text=True)
+                if res.returncode == 0:
+                    count = int(res.stdout.strip())
+                    if count > 0:
+                        print(f"\n[SyncOverseer] Objective {obj_id} is behind origin/main by {count} commits. Triggering sync.")
+                        directive = (
+                            f"Sync branch '{branch_name}' with 'origin/main' using 'git pull --rebase origin main'. "
+                            "MANDATORY: Resolve any conflicts and force-push the results. "
+                            "If you cannot resolve conflicts automatically, report a 'Red Alert' in your telemetry and stop. "
+                            "Otherwise, close this objective only if it was a dedicated sync task, "
+                            "or just finish if you are an SCV-Coder resuming work."
+                        )
+                        spawn_agent("scv-coder", obj_id, directive=directive)
+
+        except Exception:
+            pass
+
+    def _run(self):
+        while not self.stop_event.is_set():
+            self._check_sync()
             self.stop_event.wait(self.interval)
 
     def start(self):
@@ -192,15 +311,15 @@ def cleanup_scv(objective_id: str, project_root: str):
     if os.path.exists(worktree_path):
         try:
             subprocess.run(
-                ["git", "worktree", "remove", "--force", worktree_path],
+                ["bd", "worktree", "remove", worktree_path],
                 cwd=project_root,
                 check=False,
                 capture_output=True,
                 text=True
             )
-            print(f"Removed worktree at {worktree_path}")
+            print(f"Removed worktree at {worktree_path} via 'bd worktree'")
         except Exception as e:
-            print(f"Failed to remove worktree {worktree_path}: {e}")
+            print(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
     # 3. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
@@ -240,6 +359,9 @@ def run_adjutant_agent(initial_directive: str):
     overseer = SCVOverseer()
     overseer.start()
     
+    sync_overseer = SyncOverseer()
+    sync_overseer.start()
+    
     try:
         subprocess.run(cmd, env=env, check=False)
     except FileNotFoundError:
@@ -251,14 +373,21 @@ def run_adjutant_agent(initial_directive: str):
     finally:
         hud.stop()
         overseer.stop()
+        sync_overseer.stop()
         if os.path.exists(temp_prompt_path):
             os.remove(temp_prompt_path)
 
 
-def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None):
+def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, directive: str = "Execute mission."):
     """
     Spawns a sub-agent asynchronously.
     """
+    # Mark the objective as in_progress in bd
+    try:
+        subprocess.run(["bd", "update", objective_id, "--status", "in_progress"], check=False, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     agent_dir = os.path.join(base_dir, "adjutant", "agents", agent_name)
     system_prompt_path = os.path.join(agent_dir, "system.md")
@@ -287,13 +416,13 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None):
 
     try:
         subprocess.run(
-            ["git", "worktree", "add", "-b", branch_name, worktree_path],
+            ["bd", "worktree", "create", worktree_path, "--branch", branch_name],
             cwd=project_root,
             check=True,
             capture_output=True,
             text=True
         )
-        print(f"Created worktree at {worktree_path} on branch {branch_name}")
+        print(f"Created worktree at {worktree_path} on branch {branch_name} via 'bd worktree'")
     except subprocess.CalledProcessError as e:
         if "already exists" in e.stderr or "already exists" in e.stdout:
             print(f"Worktree or branch already exists for {objective_id}. Proceeding.")
@@ -327,7 +456,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None):
         "--include-directories", git_dir,
         "--yolo", 
         "--sandbox", 
-        "-p", "Execute mission."
+        "-p", directive
     ]
     
     log_file = open(log_path, "a")
@@ -342,22 +471,23 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None):
     log_file.close()
 
     registry_path = os.path.join(telemetry_dir, "active_scvs.json")
-    try:
-        if os.path.exists(registry_path):
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-        else:
+    with _registry_lock:
+        try:
+            if os.path.exists(registry_path):
+                with open(registry_path, "r") as f:
+                    registry = json.load(f)
+            else:
+                registry = {}
+        except (json.JSONDecodeError, IOError):
             registry = {}
-    except (json.JSONDecodeError, IOError):
-        registry = {}
-    
-    registry[objective_id] = {
-        "pid": process.pid,
-        "agent_name": agent_name,
-        "model": model
-    }
-    
-    with open(registry_path, "w") as f:
-        json.dump(registry, f, indent=2)
+        
+        registry[objective_id] = {
+            "pid": process.pid,
+            "agent_name": agent_name,
+            "model": model
+        }
+        
+        with open(registry_path, "w") as f:
+            json.dump(registry, f, indent=2)
 
     print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")

@@ -29,9 +29,9 @@ class TestSCVMonitoring(unittest.TestCase):
             text=True
         )
         
-        # Verify git worktree remove
+        # Verify bd worktree remove
         mock_run.assert_any_call(
-            ["git", "worktree", "remove", "--force", worktree_path],
+            ["bd", "worktree", "remove", worktree_path],
             cwd=project_root,
             check=False,
             capture_output=True,
