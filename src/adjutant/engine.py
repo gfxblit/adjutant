@@ -53,6 +53,34 @@ def is_process_running(pid: int) -> bool:
         return True
 
 
+def get_active_scvs(project_root: str) -> dict:
+    """
+    Scans worktrees for .scv_info.json files and returns a dictionary of active SCVs.
+    Active means the process with the PID in .scv_info.json is still running.
+    """
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    active_scvs = {}
+
+    if not os.path.exists(worktrees_dir):
+        return active_scvs
+
+    for entry in os.listdir(worktrees_dir):
+        worktree_path = os.path.join(worktrees_dir, entry)
+        if os.path.isdir(worktree_path) and not entry.startswith('.'):
+            scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+            if os.path.exists(scv_info_path):
+                try:
+                    with open(scv_info_path, "r") as f:
+                        scv_info = json.load(f)
+
+                    pid = scv_info.get("pid")
+                    if pid and is_process_running(pid):
+                        active_scvs[entry] = scv_info
+                except (json.JSONDecodeError, IOError):
+                    pass
+    return active_scvs
+
+
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
         self.mission = mission
@@ -253,7 +281,6 @@ class SyncOverseer:
         self.thread = None
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.project_root = os.path.dirname(base_dir)
-        self.registry_path = os.path.join(self.project_root, ".adjutant", "logs", "active_scvs.json")
 
     def _check_sync(self):
         try:
@@ -265,14 +292,8 @@ class SyncOverseer:
             objectives = json.loads(output)
             
             # 3. Get active SCVs to avoid spawning multiple agents for same objective
-            active_objectives = []
-            if os.path.exists(self.registry_path):
-                with _registry_lock:
-                    try:
-                        with open(self.registry_path, "r") as f:
-                            active_objectives = list(json.load(f).keys())
-                    except:
-                        pass
+            active_scvs = get_active_scvs(self.project_root)
+            active_objectives = list(active_scvs.keys())
 
             for obj in objectives:
                 obj_id = obj["id"]
@@ -388,38 +409,20 @@ def cleanup_scv(objective_id: str, project_root: str):
 
 def recover_orphaned_scvs(project_root: str):
     """
-    Iterates through all SCV worktrees. If the objective is no longer active
-    in the telemetry registry OR the process is no longer running,
+    Iterates through all SCV worktrees. If the process is no longer running,
     runs cleanup_scv on it.
     """
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     if not os.path.exists(worktrees_dir):
         return
 
-    telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
-    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
-    
-    registry = {}
-    if os.path.exists(registry_path):
-        try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-
+    active_scvs = get_active_scvs(project_root)
     found_orphans = []
     
     for entry in os.listdir(worktrees_dir):
         worktree_path = os.path.join(worktrees_dir, entry)
         if os.path.isdir(worktree_path) and not entry.startswith('.'):
-            # Check if this worktree is active
-            is_active = False
-            if entry in registry:
-                pid = registry[entry].get("pid")
-                if pid and is_process_running(pid):
-                    is_active = True
-            
-            if not is_active:
+            if entry not in active_scvs:
                 found_orphans.append(entry)
 
     if not found_orphans:
@@ -428,34 +431,29 @@ def recover_orphaned_scvs(project_root: str):
 
     logger.info(f"Found {len(found_orphans)} orphaned worktree(s). Cleaning up...")
     
-    updated_registry = False
     for entry in found_orphans:
         cleanup_scv(entry, project_root)
-        updated_registry = True
 
-    if updated_registry:
+    # Maintain active_scvs.json for now (backward compatibility) until adjutant-zbw.5 removes it
+    telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
+    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
+    if os.path.exists(registry_path):
         with _registry_lock:
             try:
-                # Reload registry to ensure we don't overwrite new spawns
-                if os.path.exists(registry_path):
-                    with open(registry_path, "r") as f:
-                        latest_registry = json.load(f)
-                    for obj_id in found_orphans:
-                        if obj_id in latest_registry:
-                            del latest_registry[obj_id]
-                else:
-                    # If registry file was deleted, we only keep what's still active
-                    # but we don't have that info easily here, so we just use the original registry
-                    # minus the orphans we found.
-                    for obj_id in found_orphans:
-                        if obj_id in registry:
-                            del registry[obj_id]
-                    latest_registry = registry
-
-                with open(registry_path, "w") as f:
-                    json.dump(latest_registry, f, indent=2)
-                logger.info("Updated active_scvs.json.")
-            except IOError:
+                with open(registry_path, "r") as f:
+                    latest_registry = json.load(f)
+                
+                changed = False
+                for entry in found_orphans:
+                    if entry in latest_registry:
+                        del latest_registry[entry]
+                        changed = True
+                
+                if changed:
+                    with open(registry_path, "w") as f:
+                        json.dump(latest_registry, f, indent=2)
+                    logger.info("Updated active_scvs.json.")
+            except (json.JSONDecodeError, IOError):
                 pass
 
 
