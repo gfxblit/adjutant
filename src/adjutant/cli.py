@@ -1,10 +1,11 @@
 import argparse
 import sys
 import os
-from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs, show_status
+from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs, show_status, setup_logging
 from adjutant.ui import run_ui
 
 def main():
+    setup_logging(to_stdout=True)
     parser = argparse.ArgumentParser(description="Adjutant Autonomous Development Loop")
     subparsers = parser.add_subparsers(dest="command")
 

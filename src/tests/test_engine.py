@@ -124,7 +124,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("adjutant.engine.AdjutantHUD")
     @patch("adjutant.engine.SCVOverseer")
     @patch("adjutant.engine.recover_orphaned_scvs")
-    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.setup_logging")
+    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_setup_logging, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         directive = "Test mission"
         
@@ -139,6 +140,7 @@ class TestRunAdjutantAgent(unittest.TestCase):
         
         # The first call to open is for reading the system prompt
         # The second call is for writing the resolved prompt
+        # (The log file open is avoided because we mock setup_logging)
         
         self.assertEqual(m.call_count, 2)
         
@@ -166,7 +168,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("adjutant.engine.AdjutantHUD")
     @patch("adjutant.engine.SCVOverseer")
     @patch("adjutant.engine.recover_orphaned_scvs")
-    def test_run_adjutant_agent_hud_integration(self, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.setup_logging")
+    def test_run_adjutant_agent_hud_integration(self, mock_setup_logging, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         mock_hud_instance = mock_hud_class.return_value
         
@@ -183,18 +186,19 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("adjutant.engine.AdjutantHUD")
     @patch("adjutant.engine.SCVOverseer")
     @patch("adjutant.engine.recover_orphaned_scvs")
-    def test_run_adjutant_agent_gemini_not_found(self, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.setup_logging")
+    @patch("adjutant.engine.logger")
+    def test_run_adjutant_agent_gemini_not_found(self, mock_logger, mock_setup_logging, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         mock_run.side_effect = FileNotFoundError()
         
         with patch("sys.exit") as mock_exit:
-            with patch("builtins.print") as mock_print:
-                # Mocking open to avoid file system interaction
-                with patch("builtins.open", mock_open(read_data="template")):
-                    run_adjutant_agent("Test")
+            # Mocking open to avoid file system interaction
+            with patch("builtins.open", mock_open(read_data="template")):
+                run_adjutant_agent("Test")
         
         mock_exit.assert_called_with(1)
-        mock_print.assert_any_call("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
+        mock_logger.info.assert_any_call("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
         mock_recover.assert_called_once()
 
 if __name__ == "__main__":

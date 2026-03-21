@@ -3,6 +3,41 @@ import subprocess
 import sys
 import threading
 import json
+import logging
+from typing import Optional
+
+# Setup logger
+logger = logging.getLogger("adjutant")
+
+def setup_logging(to_stdout: bool = False, log_file: Optional[str] = None):
+    """
+    Configures the adjutant logger.
+    """
+    # Remove existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        
+    logger.setLevel(logging.INFO)
+    
+    # We use a formatter for file logging, but for stdout we might want a simpler one
+    # or none at all if we are mimicking print.
+    # To mimic print, we use a simple formatter or just the message.
+    if to_stdout:
+        handler = logging.StreamHandler(sys.stdout)
+        # No special format for stdout to keep it clean and mimic print
+        handler.setFormatter(logging.Formatter('%(message)s'))
+        logger.addHandler(handler)
+    
+    if log_file:
+        # Ensure directory exists
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        
+        handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
 _registry_lock = threading.Lock()
 
@@ -147,7 +182,7 @@ class SCVOverseer:
                         current_model = scv_info.get("model", self.MODELS[0])
                         # Detect capacity or quota errors
                         if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED", "TerminalQuotaError"]):
-                            print(f"\n[Overseer] Detected capacity crash for SCV {objective_id} ({current_model}). Restarting with fallback model.")
+                            logger.info(f"\n[Overseer] Detected capacity crash for SCV {objective_id} ({current_model}). Restarting with fallback model.")
                             
                             next_model = None
                             try:
@@ -163,7 +198,7 @@ class SCVOverseer:
                                 # so we just skip adding it to active_registry here
                                 continue
                             else:
-                                print(f"[Overseer] All fallback models exhausted for {objective_id}.")
+                                logger.info(f"[Overseer] All fallback models exhausted for {objective_id}.")
                     except IOError:
                         pass
                 
@@ -255,7 +290,7 @@ class SyncOverseer:
                 if res.returncode == 0:
                     count = int(res.stdout.strip())
                     if count > 0:
-                        print(f"\n[SyncOverseer] Objective {obj_id} is behind origin/main by {count} commits. Triggering sync.")
+                        logger.info(f"\n[SyncOverseer] Objective {obj_id} is behind origin/main by {count} commits. Triggering sync.")
                         directive = (
                             f"Sync branch '{branch_name}' with 'origin/main' using 'git pull --rebase origin main'. "
                             "MANDATORY: Resolve any conflicts and force-push the results. "
@@ -294,7 +329,7 @@ def cleanup_scv(objective_id: str, project_root: str):
     branch_name = f"scv/{objective_id}"
     resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
 
-    print(f"\n[Cleaning up SCV for {objective_id}]")
+    logger.info(f"\n[Cleaning up SCV for {objective_id}]")
 
     # 1. Auto-commit any pending changes in the worktree
     if os.path.exists(worktree_path):
@@ -311,9 +346,9 @@ def cleanup_scv(objective_id: str, project_root: str):
                 check=False,
                 capture_output=True
             )
-            print(f"Auto-committed any stranded changes in {worktree_path}.")
+            logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
         except Exception as e:
-            print(f"Failed to auto-commit in worktree {worktree_path}: {e}")
+            logger.info(f"Failed to auto-commit in worktree {worktree_path}: {e}")
 
     # 2. Push the branch
     try:
@@ -324,9 +359,9 @@ def cleanup_scv(objective_id: str, project_root: str):
             capture_output=True,
             text=True
         )
-        print(f"Pushed branch {branch_name} to origin.")
+        logger.info(f"Pushed branch {branch_name} to origin.")
     except Exception as e:
-        print(f"Failed to push branch {branch_name}: {e}")
+        logger.info(f"Failed to push branch {branch_name}: {e}")
 
     # 3. Cleanup worktree
     if os.path.exists(worktree_path):
@@ -338,17 +373,17 @@ def cleanup_scv(objective_id: str, project_root: str):
                 capture_output=True,
                 text=True
             )
-            print(f"Removed worktree at {worktree_path} via 'bd worktree'")
+            logger.info(f"Removed worktree at {worktree_path} via 'bd worktree'")
         except Exception as e:
-            print(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
+            logger.info(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
     # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
-            print(f"Removed resolved system prompt: {resolved_system_prompt_path}")
+            logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
         except Exception as e:
-            print(f"Failed to remove resolved system prompt: {e}")
+            logger.info(f"Failed to remove resolved system prompt: {e}")
 
 
 def recover_orphaned_scvs(project_root: str):
@@ -388,24 +423,38 @@ def recover_orphaned_scvs(project_root: str):
                 found_orphans.append(entry)
 
     if not found_orphans:
-        print("No orphaned SCV worktrees found.")
+        logger.info("No orphaned SCV worktrees found.")
         return
 
-    print(f"Found {len(found_orphans)} orphaned worktree(s). Cleaning up...")
+    logger.info(f"Found {len(found_orphans)} orphaned worktree(s). Cleaning up...")
     
     updated_registry = False
     for entry in found_orphans:
         cleanup_scv(entry, project_root)
-        if entry in registry:
-            del registry[entry]
-            updated_registry = True
+        updated_registry = True
 
     if updated_registry:
         with _registry_lock:
             try:
+                # Reload registry to ensure we don't overwrite new spawns
+                if os.path.exists(registry_path):
+                    with open(registry_path, "r") as f:
+                        latest_registry = json.load(f)
+                    for obj_id in found_orphans:
+                        if obj_id in latest_registry:
+                            del latest_registry[obj_id]
+                else:
+                    # If registry file was deleted, we only keep what's still active
+                    # but we don't have that info easily here, so we just use the original registry
+                    # minus the orphans we found.
+                    for obj_id in found_orphans:
+                        if obj_id in registry:
+                            del registry[obj_id]
+                    latest_registry = registry
+
                 with open(registry_path, "w") as f:
-                    json.dump(registry, f, indent=2)
-                print("Updated active_scvs.json.")
+                    json.dump(latest_registry, f, indent=2)
+                logger.info("Updated active_scvs.json.")
             except IOError:
                 pass
 
@@ -417,7 +466,11 @@ def run_adjutant_agent(initial_directive: str):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     project_root = os.path.dirname(base_dir)
 
-    print("\n[Adjutant Online: Initiating Mission Planning]")
+    # Setup logging to file by default for the interactive session
+    log_path = os.path.join(project_root, ".beads", "telemetry", "adjutant.log")
+    setup_logging(to_stdout=False, log_file=log_path)
+
+    logger.info("\n[Adjutant Online: Initiating Mission Planning]")
     
     # Recover any orphaned SCVs from previous session
     recover_orphaned_scvs(project_root)
@@ -450,10 +503,10 @@ def run_adjutant_agent(initial_directive: str):
     try:
         subprocess.run(cmd, env=env, check=False)
     except FileNotFoundError:
-        print("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
+        logger.info("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
         sys.exit(1)
     except Exception as e:
-        print(f"Error launching Adjutant: {e}")
+        logger.info(f"Error launching Adjutant: {e}")
         sys.exit(1)
     finally:
         hud.stop()
@@ -507,10 +560,10 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             capture_output=True,
             text=True
         )
-        print(f"Created worktree at {worktree_path} on branch {branch_name} via 'bd worktree'")
+        logger.info(f"Created worktree at {worktree_path} on branch {branch_name} via 'bd worktree'")
     except subprocess.CalledProcessError as e:
         if "already exists" in e.stderr or "already exists" in e.stdout:
-            print(f"Worktree or branch already exists for {objective_id}. Proceeding.")
+            logger.info(f"Worktree or branch already exists for {objective_id}. Proceeding.")
         else:
             raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
 
@@ -529,7 +582,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         git_dir = os.path.join(worktree_path, ".git")
 
     model = starting_model or "gemini-3.1-pro-preview"
-    print(f"--- Spawning sub-agent with model: {model} ---")
+    logger.info(f"--- Spawning sub-agent with model: {model} ---")
     cmd = [
         "gemini", 
         "--model", model, 
@@ -573,7 +626,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         with open(registry_path, "w") as f:
             json.dump(registry, f, indent=2)
 
-    print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
+    logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
 
 def get_project_root() -> str:
     """Gets the main project root, resolving from within worktrees if necessary."""
