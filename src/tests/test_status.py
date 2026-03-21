@@ -14,7 +14,9 @@ def test_get_project_root():
 
 @patch("subprocess.check_output")
 @patch("builtins.print")
-def test_show_status(mock_print, mock_check_output):
+@patch("os.kill")
+def test_show_status(mock_kill, mock_print, mock_check_output):
+    mock_kill.return_value = None
     # Mock bd status output
     status_output = json.dumps({
         "summary": {
@@ -50,15 +52,27 @@ def test_show_status(mock_print, mock_check_output):
         }
     })
     
-    with patch("os.path.exists", return_value=True):
-        with patch("builtins.open", mock_open(read_data=registry_data)):
+    mission_path = os.path.join(get_project_root(), ".beads", "telemetry", "active_mission.txt")
+    
+    def exists_side_effect(path):
+        if path == mission_path: return True
+        return True # for registry check
+    
+    def open_side_effect(path, mode="r"):
+        if path == mission_path:
+            return mock_open(read_data="Test Mission Directive")()
+        return mock_open(read_data=registry_data)()
+    
+    with patch("os.path.exists", side_effect=exists_side_effect):
+        with patch("builtins.open", side_effect=open_side_effect):
             show_status()
             
     # Check if print was called with expected strings
     mock_print.assert_any_call("=== Adjutant Status ===")
+    mock_print.assert_any_call("Mission: Test Mission Directive")
     mock_print.assert_any_call("\nMission Progress: 50.0% (5/10 issues closed)")
     mock_print.assert_any_call("Open: 2 | In Progress: 3")
     mock_print.assert_any_call("\n--- Active Objectives ---")
     mock_print.assert_any_call("[obj-1] Objective 1")
     mock_print.assert_any_call("\n--- Running SCVs ---")
-    mock_print.assert_any_call("[obj-1] Agent: scv-coder | PID: 1234 | Model: gemini-3.1-pro-preview")
+    mock_print.assert_any_call("[obj-1] Agent: scv-coder | PID: 1234 | Status: Running | Model: gemini-3.1-pro-preview")

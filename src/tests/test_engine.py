@@ -137,27 +137,31 @@ class TestRunAdjutantAgent(unittest.TestCase):
         with patch("builtins.open", m):
             run_adjutant_agent(directive)
         
-        # The first call to open is for reading the system prompt
-        # The second call is for writing the resolved prompt
-        
-        self.assertEqual(m.call_count, 2)
+        # 1. read system.md
+        # 2. write .adjutant_resolved_system.md
+        # 3. write active_mission.txt
+        self.assertEqual(m.call_count, 3)
         
         # Check path of first open (read)
         read_path = m.call_args_list[0][0][0]
         self.assertTrue(read_path.endswith("adjutant/agents/adjutant/system.md"))
         
-        # Check path of second open (write)
-        write_path = m.call_args_list[1][0][0]
-        self.assertTrue(write_path.endswith(".adjutant_resolved_system.md"))
-        self.assertEqual(m.call_args_list[1][0][1], "w")
+        # Check path of second open (write resolved)
+        write_resolved_path = m.call_args_list[1][0][0]
+        self.assertTrue(write_resolved_path.endswith(".adjutant_resolved_system.md"))
+        
+        # Check path of third open (write mission)
+        write_mission_path = m.call_args_list[2][0][0]
+        self.assertTrue(write_mission_path.endswith("active_mission.txt"))
         
         handle = m()
-        # Find the write() call with the resolved content
-        resolved_content = ""
-        for call in handle.write.call_args_list:
-            resolved_content += call[0][0]
-            
-        self.assertEqual(resolved_content, template_content)
+        # Find the write() calls
+        all_writes = [call[0][0] for call in handle.write.call_args_list]
+        
+        # Check that system prompt was written (to resolved file)
+        self.assertIn(template_content, all_writes)
+        # Check that directive was written (to mission file)
+        self.assertIn(directive, all_writes)
 
 
     @patch("subprocess.run")

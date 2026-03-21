@@ -414,8 +414,8 @@ def run_adjutant_agent(initial_directive: str):
     """
     Launches the Adjutant (Planner) agent as an interactive Gemini session.
     """
+    project_root = get_project_root()
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    project_root = os.path.dirname(base_dir)
 
     print("\n[Adjutant Online: Initiating Mission Planning]")
     
@@ -447,6 +447,12 @@ def run_adjutant_agent(initial_directive: str):
     sync_overseer = SyncOverseer()
     sync_overseer.start()
     
+    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    os.makedirs(telemetry_dir, exist_ok=True)
+    mission_path = os.path.join(telemetry_dir, "active_mission.txt")
+    with open(mission_path, "w") as f:
+        f.write(initial_directive)
+    
     try:
         subprocess.run(cmd, env=env, check=False)
     except FileNotFoundError:
@@ -461,6 +467,8 @@ def run_adjutant_agent(initial_directive: str):
         sync_overseer.stop()
         if os.path.exists(temp_prompt_path):
             os.remove(temp_prompt_path)
+        if os.path.exists(mission_path):
+            os.remove(mission_path)
 
 
 def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, directive: str = "Execute mission."):
@@ -484,7 +492,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         prompt_template = f.read()
     
     prompt = prompt_template.format(objective_id=objective_id)
-    project_root = os.path.dirname(base_dir)
+    project_root = get_project_root()
 
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     os.makedirs(worktrees_dir, exist_ok=True)
@@ -590,6 +598,16 @@ def show_status():
     project_root = get_project_root()
     print("=== Adjutant Status ===")
     
+    # Try to read active mission from telemetry
+    mission_path = os.path.join(project_root, ".beads", "telemetry", "active_mission.txt")
+    if os.path.exists(mission_path):
+        try:
+            with open(mission_path, "r") as f:
+                mission = f.read().strip()
+                print(f"Mission: {mission}")
+        except Exception:
+            pass
+
     # Get active mission summary
     try:
         output = subprocess.check_output(["bd", "status", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
