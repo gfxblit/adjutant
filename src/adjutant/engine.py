@@ -530,7 +530,6 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
 
     model = starting_model or "gemini-3.1-pro-preview"
     print(f"--- Spawning sub-agent with model: {model} ---")
-    
     cmd = [
         "gemini", 
         "--model", model, 
@@ -575,3 +574,79 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             json.dump(registry, f, indent=2)
 
     print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
+
+def get_project_root() -> str:
+    """Gets the main project root, resolving from within worktrees if necessary."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = os.path.dirname(base_dir)
+    # Check if we are in an SCV worktree
+    if ".adjutant" in root and "worktrees" in root:
+        # Move up from .adjutant/worktrees/objective_id
+        root = os.path.dirname(os.path.dirname(os.path.dirname(root)))
+    return root
+
+def show_status():
+    """Displays the current status of the Adjutant mission and active SCVs."""
+    project_root = get_project_root()
+    print("=== Adjutant Status ===")
+    
+    # Get active mission summary
+    try:
+        output = subprocess.check_output(["bd", "status", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
+        status_data = json.loads(output)
+        summary = status_data.get("summary", {})
+        total = summary.get("total_issues", 0)
+        open_issues = summary.get("open_issues", 0)
+        closed = summary.get("closed_issues", 0)
+        in_progress = summary.get("in_progress_issues", 0)
+        
+        progress = (closed / total * 100) if total > 0 else 0
+        print(f"\nMission Progress: {progress:.1f}% ({closed}/{total} issues closed)")
+        print(f"Open: {open_issues} | In Progress: {in_progress}")
+    except Exception:
+        print("Could not retrieve mission status summary from bd.")
+
+    # List active objectives
+    print("\n--- Active Objectives ---")
+    try:
+        output = subprocess.check_output(["bd", "list", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
+        objectives = json.loads(output)
+        in_progress_objs = [obj for obj in objectives if obj.get("status") == "in_progress"]
+        if not in_progress_objs:
+            print("No active objectives.")
+        else:
+            for obj in in_progress_objs:
+                print(f"[{obj['id']}] {obj['title']}")
+    except Exception:
+        print("Could not retrieve active objectives list from bd.")
+
+    # List running SCVs
+    print("\n--- Running SCVs ---")
+    registry_path = os.path.join(project_root, ".beads", "telemetry", "active_scvs.json")
+    if os.path.exists(registry_path):
+        try:
+            with open(registry_path, "r") as f:
+                registry = json.load(f)
+            
+            if not registry:
+                print("No active SCVs.")
+            else:
+                for obj_id, info in registry.items():
+                    pid = info.get("pid", "Unknown")
+                    agent = info.get("agent_name", "Unknown")
+                    model = info.get("model", "Unknown")
+                    
+                    # Check if actually running
+                    running = "Running"
+                    try:
+                        os.kill(int(pid), 0)
+                    except (ProcessLookupError, ValueError, TypeError):
+                        running = "Stopped"
+                    except PermissionError:
+                        running = "Active (No Permission)"
+                        
+                    print(f"[{obj_id}] Agent: {agent} | PID: {pid} | Status: {running} | Model: {model}")
+        except Exception as e:
+            print(f"Error reading SCV registry: {e}")
+    else:
+        print("No active SCVs.")
