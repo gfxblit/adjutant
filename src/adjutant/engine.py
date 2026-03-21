@@ -626,6 +626,18 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         with open(registry_path, "w") as f:
             json.dump(registry, f, indent=2)
 
+        # Write worktree-local SCV info
+        scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+        try:
+            with open(scv_info_path, "w") as f:
+                json.dump({
+                    "pid": process.pid,
+                    "agent_name": agent_name,
+                    "model": model
+                }, f, indent=2)
+        except IOError as e:
+            logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
+
     logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
 
 def get_project_root() -> str:
