@@ -1,0 +1,1 @@
+Blocked: Cannot commit or push changes for 'Expose Recovery CLI' due to persistent 'dolt circuit breaker open' error and inaccessible bd service. Code is implemented but cannot be verified or deployed. Dependent on environment issue resolution.

@@ -34,3 +34,12 @@ def test_run_agent_subcommand():
         with patch("adjutant.cli.spawn_agent") as mock_spawn:
             main()
             mock_spawn.assert_called_once_with("scv-coder", "adjutant-123")
+
+def test_recover_subcommand():
+    # Test 'recover' subcommand
+    test_args = ["adjutant", "recover"]
+    with patch.object(sys, "argv", test_args):
+        with patch("adjutant.cli.recover_orphaned_scvs") as mock_recover:
+            main()
+            # The project_root calculation is done inside cli.py, so we just check if it was called
+            mock_recover.assert_called_once()

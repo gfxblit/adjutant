@@ -234,7 +234,7 @@ class SyncOverseer:
                     try:
                         with open(self.registry_path, "r") as f:
                             active_objectives = list(json.load(f).keys())
-                    except:
+                    except Exception:
                         pass
 
             for obj in objectives:
@@ -294,7 +294,26 @@ def cleanup_scv(objective_id: str, project_root: str):
 
     print(f"\n[Cleaning up SCV for {objective_id}]")
 
-    # 1. Push the branch
+    # 1. Auto-commit any stranded changes
+    if os.path.exists(worktree_path):
+        try:
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=worktree_path,
+                check=False,
+                capture_output=True
+            )
+            subprocess.run(
+                ["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"],
+                cwd=worktree_path,
+                check=False,
+                capture_output=True
+            )
+            print(f"Auto-committed any stranded changes in {worktree_path}.")
+        except Exception as e:
+            print(f"Failed to auto-commit in worktree {worktree_path}: {e}")
+
+    # 2. Push the branch
     try:
         subprocess.run(
             ["git", "push", "origin", branch_name],
@@ -307,7 +326,7 @@ def cleanup_scv(objective_id: str, project_root: str):
     except Exception as e:
         print(f"Failed to push branch {branch_name}: {e}")
 
-    # 2. Cleanup worktree
+    # 3. Cleanup worktree
     if os.path.exists(worktree_path):
         try:
             subprocess.run(
@@ -321,13 +340,45 @@ def cleanup_scv(objective_id: str, project_root: str):
         except Exception as e:
             print(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
-    # 3. Cleanup resolved system prompt
+    # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
             print(f"Removed resolved system prompt: {resolved_system_prompt_path}")
         except Exception as e:
             print(f"Failed to remove resolved system prompt: {e}")
+
+
+def recover_orphaned_scvs(project_root: str, dry_run: bool = False):
+    """
+    Iterates through all SCV worktrees. If the objective is no longer active
+    in the telemetry registry, runs cleanup_scv on it.
+    """
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    if not os.path.exists(worktrees_dir):
+        return
+
+    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
+
+    active_objectives = []
+    if os.path.exists(registry_path):
+        try:
+            with open(registry_path, "r") as f:
+                active_objectives = list(json.load(f).keys())
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    for entry in os.listdir(worktrees_dir):
+        worktree_path = os.path.join(worktrees_dir, entry)
+        if os.path.isdir(worktree_path) and not entry.startswith('.'):
+            # Check if this worktree is active
+            if entry not in active_objectives:
+                if dry_run:
+                    print(f"[Recovery][Dry Run] Found orphaned worktree for {entry}. Would cleanup.")
+                else:
+                    print(f"[Recovery] Found orphaned worktree for {entry}. Cleaning up...")
+                    cleanup_scv(entry, project_root)
 
 
 def run_adjutant_agent(initial_directive: str):

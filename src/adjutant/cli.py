@@ -1,6 +1,8 @@
 import argparse
 import sys
-from adjutant.engine import run_adjutant_agent, spawn_agent
+import os
+import subprocess
+from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs
 from adjutant.ui import run_ui
 
 def main():
@@ -20,15 +22,39 @@ def main():
     run_agent_parser.add_argument("agent", help="Agent name (e.g. scv-coder)")
     run_agent_parser.add_argument("objective_id", help="Objective ID to work on")
 
+    # recover subcommand
+    recover_parser = subparsers.add_parser("recover", help="Trigger bulk recovery of orphaned SCV worktrees")
+    recover_parser.add_argument("--objective", help="Recover a specific objective ID")
+    recover_parser.add_argument("--dry-run", action="store_true", help="List what would be recovered without doing it")
+
     # Handle default 'plan' subcommand for backward compatibility
-    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "ui", "run-agent", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "ui", "run-agent", "recover", "-h", "--help"]:
         # If the first argument is not a known command or help, assume 'plan'
         sys.argv.insert(1, "plan")
     
     args = parser.parse_args()
 
+    # Find project root (handle worktrees)
+    try:
+        project_root = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], stderr=subprocess.DEVNULL, text=True).strip()
+        if project_root.endswith(".git"):
+            project_root = os.path.dirname(project_root)
+        project_root = os.path.abspath(project_root)
+    except subprocess.CalledProcessError:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_root = os.path.dirname(base_dir)
+
     if args.command == "run-agent":
         spawn_agent(args.agent, args.objective_id)
+    elif args.command == "recover":
+        from adjutant.engine import cleanup_scv
+        if args.objective:
+            if args.dry_run:
+                print(f"[Dry Run] Would recover specific objective: {args.objective}")
+            else:
+                cleanup_scv(args.objective, project_root)
+        else:
+            recover_orphaned_scvs(project_root, dry_run=args.dry_run)
     elif args.command == "ui":
         mission_args = getattr(args, "mission", [])
         mission_directive = " ".join(mission_args)
