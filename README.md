@@ -29,6 +29,12 @@ Manually spawns a specialized sub-agent to work on a specific objective.
 - **`agent`**: One of `scv-coder` or `scv-tester`.
 - **`objective_id`**: The ID of the `bd` objective (e.g., `adjutant-aq1`).
 
+### `adjutant recover [--objective <id>] [--dry-run]`
+Triggers bulk recovery of orphaned SCV worktrees. An SCV worktree is considered "orphaned" if its objective is no longer active in the telemetry registry.
+
+- **`--objective <id>`**: Optionally recover a specific objective ID.
+- **`--dry-run`**: List what would be recovered without actually performing the recovery.
+
 ## Core Concepts
 
 ### Missions and Objectives
