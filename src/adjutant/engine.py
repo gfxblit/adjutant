@@ -531,17 +531,17 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     model = starting_model or "gemini-3.1-pro-preview"
     print(f"--- Spawning sub-agent with model: {model} ---")
     cmd = [
-        "gemini", 
-        "--model", model, 
-        "--policy", policy_dir, 
-        "--include-directories", project_root, 
-        "--include-directories", os.path.join(project_root, ".beads"), 
+        "gemini",
+        "--model", model,
+        "--policy", policy_dir,
+        "--include-directories", project_root,
+        "--include-directories", os.path.join(project_root, ".beads"),
+        "--include-directories", worktree_path,
         "--include-directories", git_common_dir,
         "--include-directories", git_dir,
-        "--yolo", 
+        "--yolo",
         "-p", directive
-    ]
-    
+    ]    
     log_file = open(log_path, "a")
     process = subprocess.Popen(
         cmd,

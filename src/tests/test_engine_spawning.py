@@ -54,6 +54,7 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run)
     assert "--model" in cmd
     assert "gemini-3.1-pro-preview" in cmd
     assert "--include-directories" in cmd
+    assert "--sandbox" not in cmd  # Ensure sandbox is relaxed
     assert "-p" in cmd
     assert "Execute mission." in cmd
 
