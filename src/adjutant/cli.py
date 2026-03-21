@@ -1,11 +1,15 @@
 import argparse
 import sys
 import os
+import logging
 from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs, show_status, setup_logging
 from adjutant.ui import run_ui
 
+logger = logging.getLogger("adjutant")
+
 def main():
     setup_logging(to_stdout=True)
+    logger.info("hello world to test logs")
     parser = argparse.ArgumentParser(description="Adjutant Autonomous Development Loop")
     subparsers = parser.add_subparsers(dest="command")
 
