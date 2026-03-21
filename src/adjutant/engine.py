@@ -473,11 +473,9 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         "--include-directories", os.path.join(project_root, ".beads"), 
         "--include-directories", git_common_dir,
         "--include-directories", git_dir,
-        "--yolo", 
-        "--sandbox", 
+        "--yolo",
         "-p", directive
-    ]
-    
+        ]    
     log_file = open(log_path, "a")
     process = subprocess.Popen(
         cmd,

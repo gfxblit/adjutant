@@ -6,6 +6,13 @@ decision = "allow"
 priority = 100
 
 [[rule]]
+name = "Allow Adjutant to use git commands"
+toolName = "run_shell_command"
+commandPrefix = "git"
+decision = "allow"
+priority = 100
+
+[[rule]]
 name = "Allow Adjutant to use Beads CLI"
 toolName = "run_shell_command"
 commandPrefix = "bd"
