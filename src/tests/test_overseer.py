@@ -7,7 +7,6 @@ from adjutant.engine import SCVOverseer
 class TestSCVOverseer(unittest.TestCase):
     def setUp(self):
         self.overseer = SCVOverseer(interval=1)
-        self.registry_path = self.overseer.registry_path
         self.telemetry_dir = self.overseer.telemetry_dir
 
     @patch("adjutant.engine.SCVOverseer._get_registry_from_worktrees")
@@ -31,11 +30,6 @@ class TestSCVOverseer(unittest.TestCase):
         
         # Setup mock_open for different files
         def side_effect(path, mode="r"):
-            if "active_scvs.json" in path:
-                if "r" in mode:
-                    return mock_open(read_data=json.dumps(registry_data)).return_value
-                else:
-                    return MagicMock()
             if "obj-123.log" in path:
                 return mock_open(read_data=log_content).return_value
             return mock_open().return_value
@@ -69,11 +63,6 @@ class TestSCVOverseer(unittest.TestCase):
         log_content = "Error: RESOURCE_EXHAUSTED"
         
         def side_effect(path, mode="r"):
-            if "active_scvs.json" in path:
-                if "r" in mode:
-                    return mock_open(read_data=json.dumps(registry_data)).return_value
-                else:
-                    return MagicMock()
             if "obj-123.log" in path:
                 return mock_open(read_data=log_content).return_value
             return mock_open().return_value
@@ -152,15 +141,10 @@ class TestSCVOverseerWorktrees(unittest.TestCase):
         def open_side_effect(path, mode="r"):
             if "obj-crash.log" in path:
                 return mock_open(read_data="RESOURCE_EXHAUSTED").return_value
-            if "active_scvs.json" in path:
-                if "r" in mode:
-                    return mock_open(read_data=json.dumps(registry)).return_value
-                else:
-                    return MagicMock()
             return mock_open().return_value
 
         mock_open_file.side_effect = open_side_effect
-        mock_exists.return_value = True # For log path and registry path
+        mock_exists.return_value = True # For log path
         
         # Execute
         self.overseer._check_scvs()
@@ -192,11 +176,6 @@ class TestSCVOverseerWorktrees(unittest.TestCase):
         def open_side_effect(path, mode="r"):
             if "obj-done.log" in path:
                 return mock_open(read_data="Success!").return_value
-            if "active_scvs.json" in path:
-                if "r" in mode:
-                    return mock_open(read_data=json.dumps(registry)).return_value
-                else:
-                    return MagicMock()
             return mock_open().return_value
 
         mock_open_file.side_effect = open_side_effect
