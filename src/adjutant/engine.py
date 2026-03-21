@@ -3,6 +3,7 @@ import subprocess
 import sys
 import threading
 import json
+from filelock import FileLock, Timeout
 
 _registry_lock = threading.Lock()
 
@@ -61,11 +62,13 @@ class AdjutantHUD:
             if os.path.exists(self.registry_path):
                 with _registry_lock:
                     try:
-                        with open(self.registry_path, "r") as f:
-                            registry = json.load(f)
-                            scv_count = len(registry)
-                            scv_list = sorted(list(registry.keys()))
-                    except (json.JSONDecodeError, IOError):
+                        lock_path = self.registry_path + ".lock"
+                        with FileLock(lock_path, timeout=5):
+                            with open(self.registry_path, "r") as f:
+                                registry = json.load(f)
+                                scv_count = len(registry)
+                                scv_list = sorted(list(registry.keys()))
+                    except (json.JSONDecodeError, IOError, Timeout):
                         pass
 
             # Format title string
@@ -123,9 +126,11 @@ class SCVOverseer:
 
         with _registry_lock:
             try:
-                with open(self.registry_path, "r") as f:
-                    registry = json.load(f)
-            except (json.JSONDecodeError, IOError):
+                lock_path = self.registry_path + ".lock"
+                with FileLock(lock_path, timeout=5):
+                    with open(self.registry_path, "r") as f:
+                        registry = json.load(f)
+            except (json.JSONDecodeError, IOError, Timeout):
                 return
 
         updated_registry = False
@@ -176,22 +181,24 @@ class SCVOverseer:
         if updated_registry:
             with _registry_lock:
                 try:
-                    # Reload registry to ensure we don't overwrite new spawns
-                    if os.path.exists(self.registry_path):
-                        with open(self.registry_path, "r") as f:
-                            latest_registry = json.load(f)
-                        # Only keep the ones we still consider active
-                        # and combine with any new spawns that happened in between
-                        for obj_id in list(latest_registry.keys()):
-                            # If it was in our original registry but not in active_registry, it's done
-                            if obj_id in registry and obj_id not in active_registry:
-                                del latest_registry[obj_id]
-                    else:
-                        latest_registry = active_registry
+                    lock_path = self.registry_path + ".lock"
+                    with FileLock(lock_path, timeout=5):
+                        # Reload registry to ensure we don't overwrite new spawns
+                        if os.path.exists(self.registry_path):
+                            with open(self.registry_path, "r") as f:
+                                latest_registry = json.load(f)
+                            # Only keep the ones we still consider active
+                            # and combine with any new spawns that happened in between
+                            for obj_id in list(latest_registry.keys()):
+                                # If it was in our original registry but not in active_registry, it's done
+                                if obj_id in registry and obj_id not in active_registry:
+                                    del latest_registry[obj_id]
+                        else:
+                            latest_registry = active_registry
 
-                    with open(self.registry_path, "w") as f:
-                        json.dump(latest_registry, f, indent=2)
-                except IOError:
+                        with open(self.registry_path, "w") as f:
+                            json.dump(latest_registry, f, indent=2)
+                except (IOError, Timeout, json.JSONDecodeError):
                     pass
 
     def _run(self):
@@ -234,8 +241,10 @@ class SyncOverseer:
             if os.path.exists(self.registry_path):
                 with _registry_lock:
                     try:
-                        with open(self.registry_path, "r") as f:
-                            active_objectives = list(json.load(f).keys())
+                        lock_path = self.registry_path + ".lock"
+                        with FileLock(lock_path, timeout=5):
+                            with open(self.registry_path, "r") as f:
+                                active_objectives = list(json.load(f).keys())
                     except:
                         pass
 
@@ -366,11 +375,14 @@ def recover_orphaned_scvs(project_root: str):
     
     registry = {}
     if os.path.exists(registry_path):
-        try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
+        with _registry_lock:
+            try:
+                lock_path = registry_path + ".lock"
+                with FileLock(lock_path, timeout=5):
+                    with open(registry_path, "r") as f:
+                        registry = json.load(f)
+            except (json.JSONDecodeError, IOError, Timeout):
+                pass
 
     found_orphans = []
     
@@ -403,10 +415,27 @@ def recover_orphaned_scvs(project_root: str):
     if updated_registry:
         with _registry_lock:
             try:
-                with open(registry_path, "w") as f:
-                    json.dump(registry, f, indent=2)
-                print("Updated active_scvs.json.")
-            except IOError:
+                lock_path = registry_path + ".lock"
+                with FileLock(lock_path, timeout=5):
+                    current_registry = {}
+                    if os.path.exists(registry_path):
+                        try:
+                            with open(registry_path, "r") as f:
+                                current_registry = json.load(f)
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    changed = False
+                    for entry in found_orphans:
+                        if entry in current_registry:
+                            del current_registry[entry]
+                            changed = True
+                    
+                    if changed:
+                        with open(registry_path, "w") as f:
+                            json.dump(current_registry, f, indent=2)
+                        print("Updated active_scvs.json.")
+            except (IOError, Timeout):
                 pass
 
 
@@ -556,22 +585,28 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     registry_path = os.path.join(telemetry_dir, "active_scvs.json")
     with _registry_lock:
         try:
-            if os.path.exists(registry_path):
-                with open(registry_path, "r") as f:
-                    registry = json.load(f)
-            else:
-                registry = {}
-        except (json.JSONDecodeError, IOError):
-            registry = {}
-        
-        registry[objective_id] = {
-            "pid": process.pid,
-            "agent_name": agent_name,
-            "model": model
-        }
-        
-        with open(registry_path, "w") as f:
-            json.dump(registry, f, indent=2)
+            lock_path = registry_path + ".lock"
+            with FileLock(lock_path, timeout=10):
+                try:
+                    if os.path.exists(registry_path):
+                        with open(registry_path, "r") as f:
+                            registry = json.load(f)
+                    else:
+                        registry = {}
+                except (json.JSONDecodeError, IOError):
+                    registry = {}
+                
+                registry[objective_id] = {
+                    "pid": process.pid,
+                    "agent_name": agent_name,
+                    "model": model
+                }
+                
+                with open(registry_path, "w") as f:
+                    json.dump(registry, f, indent=2)
+        except Timeout:
+            print(f"Warning: Could not acquire lock for {registry_path}")
+            pass
 
     print(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
 
@@ -625,8 +660,10 @@ def show_status():
     registry_path = os.path.join(project_root, ".beads", "telemetry", "active_scvs.json")
     if os.path.exists(registry_path):
         try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
+            lock_path = registry_path + ".lock"
+            with FileLock(lock_path, timeout=5):
+                with open(registry_path, "r") as f:
+                    registry = json.load(f)
             
             if not registry:
                 print("No active SCVs.")
