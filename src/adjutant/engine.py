@@ -6,6 +6,18 @@ import json
 
 _registry_lock = threading.Lock()
 
+def is_process_running(pid: int) -> bool:
+    """Checks if a process with a given PID is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        # If we lack permission or hit other errors, assume it might be running
+        return True
+
+
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
         self.mission = mission
@@ -105,16 +117,6 @@ class SCVOverseer:
         self.telemetry_dir = os.path.join(self.project_root, ".beads", "telemetry")
         self.registry_path = os.path.join(self.telemetry_dir, "active_scvs.json")
 
-    def _is_process_running(self, pid: int) -> bool:
-        try:
-            os.kill(pid, 0)
-            return True
-        except ProcessLookupError:
-            return False
-        except Exception:
-            # If we lack permission or hit other errors, assume it might be running
-            return True
-
     def _check_scvs(self):
         if not os.path.exists(self.registry_path):
             return
@@ -133,7 +135,7 @@ class SCVOverseer:
             pid = scv_info.get("pid")
             agent_name = scv_info.get("agent_name")
             
-            if pid and not self._is_process_running(pid):
+            if pid and not is_process_running(pid):
                 log_path = os.path.join(self.telemetry_dir, f"{objective_id}.log")
                 should_cleanup = True
 
@@ -294,7 +296,26 @@ def cleanup_scv(objective_id: str, project_root: str):
 
     print(f"\n[Cleaning up SCV for {objective_id}]")
 
-    # 1. Push the branch
+    # 1. Auto-commit any pending changes in the worktree
+    if os.path.exists(worktree_path):
+        try:
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=worktree_path,
+                check=False,
+                capture_output=True
+            )
+            subprocess.run(
+                ["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"],
+                cwd=worktree_path,
+                check=False,
+                capture_output=True
+            )
+            print(f"Auto-committed any stranded changes in {worktree_path}.")
+        except Exception as e:
+            print(f"Failed to auto-commit in worktree {worktree_path}: {e}")
+
+    # 2. Push the branch
     try:
         subprocess.run(
             ["git", "push", "origin", branch_name],
@@ -307,7 +328,7 @@ def cleanup_scv(objective_id: str, project_root: str):
     except Exception as e:
         print(f"Failed to push branch {branch_name}: {e}")
 
-    # 2. Cleanup worktree
+    # 3. Cleanup worktree
     if os.path.exists(worktree_path):
         try:
             subprocess.run(
@@ -321,7 +342,7 @@ def cleanup_scv(objective_id: str, project_root: str):
         except Exception as e:
             print(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
-    # 3. Cleanup resolved system prompt
+    # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
@@ -330,13 +351,77 @@ def cleanup_scv(objective_id: str, project_root: str):
             print(f"Failed to remove resolved system prompt: {e}")
 
 
+def recover_orphaned_scvs(project_root: str):
+    """
+    Iterates through all SCV worktrees. If the objective is no longer active
+    in the telemetry registry OR the process is no longer running,
+    runs cleanup_scv on it.
+    """
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    if not os.path.exists(worktrees_dir):
+        return
+
+    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
+    
+    registry = {}
+    if os.path.exists(registry_path):
+        try:
+            with open(registry_path, "r") as f:
+                registry = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    found_orphans = []
+    
+    for entry in os.listdir(worktrees_dir):
+        worktree_path = os.path.join(worktrees_dir, entry)
+        if os.path.isdir(worktree_path) and not entry.startswith('.'):
+            # Check if this worktree is active
+            is_active = False
+            if entry in registry:
+                pid = registry[entry].get("pid")
+                if pid and is_process_running(pid):
+                    is_active = True
+            
+            if not is_active:
+                found_orphans.append(entry)
+
+    if not found_orphans:
+        print("No orphaned SCV worktrees found.")
+        return
+
+    print(f"Found {len(found_orphans)} orphaned worktree(s). Cleaning up...")
+    
+    updated_registry = False
+    for entry in found_orphans:
+        cleanup_scv(entry, project_root)
+        if entry in registry:
+            del registry[entry]
+            updated_registry = True
+
+    if updated_registry:
+        with _registry_lock:
+            try:
+                with open(registry_path, "w") as f:
+                    json.dump(registry, f, indent=2)
+                print("Updated active_scvs.json.")
+            except IOError:
+                pass
+
+
 def run_adjutant_agent(initial_directive: str):
     """
     Launches the Adjutant (Planner) agent as an interactive Gemini session.
     """
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(base_dir)
+
     print("\n[Adjutant Online: Initiating Mission Planning]")
     
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Recover any orphaned SCVs from previous session
+    recover_orphaned_scvs(project_root)
+
     adjutant_agent_dir = os.path.join(base_dir, "adjutant", "agents", "adjutant")
     system_prompt_path = os.path.join(adjutant_agent_dir, "system.md")
     
@@ -455,7 +540,6 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         "--include-directories", git_common_dir,
         "--include-directories", git_dir,
         "--yolo", 
-        "--sandbox", 
         "-p", directive
     ]
     

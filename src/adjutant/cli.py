@@ -1,6 +1,7 @@
 import argparse
 import sys
-from adjutant.engine import run_adjutant_agent, spawn_agent
+import os
+from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs
 from adjutant.ui import run_ui
 
 def main():
@@ -20,8 +21,11 @@ def main():
     run_agent_parser.add_argument("agent", help="Agent name (e.g. scv-coder)")
     run_agent_parser.add_argument("objective_id", help="Objective ID to work on")
 
+    # recover subcommand
+    recover_parser = subparsers.add_parser("recover", help="Recover stranded SCV work from orphaned worktrees")
+
     # Handle default 'plan' subcommand for backward compatibility
-    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "ui", "run-agent", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "ui", "run-agent", "recover", "-h", "--help"]:
         # If the first argument is not a known command or help, assume 'plan'
         sys.argv.insert(1, "plan")
     
@@ -29,6 +33,12 @@ def main():
 
     if args.command == "run-agent":
         spawn_agent(args.agent, args.objective_id)
+    elif args.command == "recover":
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_root = os.path.dirname(base_dir)
+        print("Initiating SCV worktree recovery...")
+        recover_orphaned_scvs(project_root)
+        print("Recovery complete.")
     elif args.command == "ui":
         mission_args = getattr(args, "mission", [])
         mission_directive = " ".join(mission_args)

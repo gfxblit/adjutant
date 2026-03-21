@@ -123,7 +123,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
     @patch("adjutant.engine.SCVOverseer")
-    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.recover_orphaned_scvs")
+    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         directive = "Test mission"
         
@@ -164,7 +165,8 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
     @patch("adjutant.engine.SCVOverseer")
-    def test_run_adjutant_agent_hud_integration(self, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.recover_orphaned_scvs")
+    def test_run_adjutant_agent_hud_integration(self, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         mock_hud_instance = mock_hud_class.return_value
         
@@ -173,13 +175,15 @@ class TestRunAdjutantAgent(unittest.TestCase):
         mock_hud_class.assert_called_once_with(mission="Test")
         mock_hud_instance.start.assert_called_once()
         mock_hud_instance.stop.assert_called_once()
+        mock_recover.assert_called_once()
 
     @patch("subprocess.run")
     @patch("os.path.exists")
     @patch("os.remove")
     @patch("adjutant.engine.AdjutantHUD")
     @patch("adjutant.engine.SCVOverseer")
-    def test_run_adjutant_agent_gemini_not_found(self, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.recover_orphaned_scvs")
+    def test_run_adjutant_agent_gemini_not_found(self, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         mock_run.side_effect = FileNotFoundError()
         
@@ -191,6 +195,7 @@ class TestRunAdjutantAgent(unittest.TestCase):
         
         mock_exit.assert_called_with(1)
         mock_print.assert_any_call("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
+        mock_recover.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()
