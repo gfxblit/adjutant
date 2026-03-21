@@ -234,7 +234,7 @@ class SyncOverseer:
                     try:
                         with open(self.registry_path, "r") as f:
                             active_objectives = list(json.load(f).keys())
-                    except:
+                    except Exception:
                         pass
 
             for obj in objectives:
@@ -294,20 +294,39 @@ def cleanup_scv(objective_id: str, project_root: str):
 
     print(f"\n[Cleaning up SCV for {objective_id}]")
 
-    # 1. Push the branch
+    # 1. Auto-commit uncommitted changes if worktree exists
+    if os.path.exists(worktree_path):
+        try:
+            # Check for changes (modified, untracked, etc)
+            res = subprocess.run(["git", "status", "--porcelain"], cwd=worktree_path, capture_output=True, text=True)
+            if res.stdout.strip():
+                print(f"Uncommitted changes found in {worktree_path}. Auto-committing.")
+                subprocess.run(["git", "add", "-A"], cwd=worktree_path, check=True)
+                subprocess.run(
+                    ["git", "commit", "-m", "[SCV Auto-Commit] Work in progress before cleanup"],
+                    cwd=worktree_path,
+                    check=True
+                )
+        except Exception as e:
+            print(f"Failed to auto-commit changes in {worktree_path}: {e}")
+
+    # 2. Push the branch
     try:
-        subprocess.run(
+        res = subprocess.run(
             ["git", "push", "origin", branch_name],
             cwd=project_root,
             check=False,
             capture_output=True,
             text=True
         )
-        print(f"Pushed branch {branch_name} to origin.")
+        if res.returncode == 0:
+            print(f"Pushed branch {branch_name} to origin.")
+        else:
+            print(f"Failed to push branch {branch_name}: {res.stderr}")
     except Exception as e:
-        print(f"Failed to push branch {branch_name}: {e}")
+        print(f"Failed to execute git push for {branch_name}: {e}")
 
-    # 2. Cleanup worktree
+    # 3. Cleanup worktree
     if os.path.exists(worktree_path):
         try:
             subprocess.run(
@@ -321,7 +340,7 @@ def cleanup_scv(objective_id: str, project_root: str):
         except Exception as e:
             print(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
-    # 3. Cleanup resolved system prompt
+    # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
