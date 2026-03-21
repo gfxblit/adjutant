@@ -152,16 +152,46 @@ class SCVOverseer:
         self.telemetry_dir = os.path.join(self.project_root, ".adjutant", "logs")
         self.registry_path = os.path.join(self.telemetry_dir, "active_scvs.json")
 
-    def _check_scvs(self):
-        if not os.path.exists(self.registry_path):
-            return
+    def _get_registry_from_worktrees(self):
+        """Scans .adjutant/worktrees for .scv_info.json files to build the registry."""
+        worktrees_dir = os.path.join(self.project_root, ".adjutant", "worktrees")
+        registry = {}
+        if not os.path.exists(worktrees_dir):
+            return registry
+            
+        try:
+            for entry in os.listdir(worktrees_dir):
+                if entry.startswith('.'):
+                    continue
+                worktree_path = os.path.join(worktrees_dir, entry)
+                if os.path.isdir(worktree_path):
+                    scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+                    if os.path.exists(scv_info_path):
+                        try:
+                            with open(scv_info_path, "r") as f:
+                                scv_info = json.load(f)
+                                registry[entry] = scv_info
+                        except (json.JSONDecodeError, IOError):
+                            pass
+        except OSError:
+            pass
+        return registry
 
-        with _registry_lock:
-            try:
-                with open(self.registry_path, "r") as f:
-                    registry = json.load(f)
-            except (json.JSONDecodeError, IOError):
-                return
+    def _check_scvs(self):
+        registry = self._get_registry_from_worktrees()
+        if not registry:
+            # If we found no SCVs in worktrees, ensure the legacy registry is also cleared
+            if os.path.exists(self.registry_path):
+                with _registry_lock:
+                    try:
+                        with open(self.registry_path, "r") as f:
+                            current = json.load(f)
+                        if current:
+                            with open(self.registry_path, "w") as f:
+                                json.dump({}, f, indent=2)
+                    except:
+                        pass
+            return
 
         updated_registry = False
         active_registry = {}
