@@ -53,16 +53,50 @@ def is_process_running(pid: int) -> bool:
         return True
 
 
+def get_project_root() -> str:
+    """Gets the main project root, resolving from within worktrees if necessary."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = os.path.dirname(base_dir)
+    # Check if we are in an SCV worktree
+    if ".adjutant" in root and "worktrees" in root:
+        # Move up from .adjutant/worktrees/objective_id
+        root = os.path.dirname(os.path.dirname(os.path.dirname(root)))
+    return root
+
+
+def get_active_scvs(project_root: str) -> dict:
+    """Scans worktrees for .scv_info.json files and returns a registry-like dict of active SCVs."""
+    active_scvs = {}
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    if not os.path.isdir(worktrees_dir):
+        return active_scvs
+
+    for objective_id in os.listdir(worktrees_dir):
+        wt_path = os.path.join(worktrees_dir, objective_id)
+        if not os.path.isdir(wt_path):
+            continue
+
+        info_path = os.path.join(wt_path, ".scv_info.json")
+        if os.path.exists(info_path):
+            try:
+                with open(info_path, "r") as f:
+                    info = json.load(f)
+
+                pid = info.get("pid")
+                if pid and is_process_running(pid):
+                    active_scvs[objective_id] = info
+            except (json.JSONDecodeError, IOError):
+                pass
+    return active_scvs
+
+
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
         self.mission = mission
         self.interval = interval
         self.stop_event = threading.Event()
         self.thread = None
-        # Find project root
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.project_root = os.path.dirname(base_dir)
-        self.registry_path = os.path.join(self.project_root, ".adjutant", "logs", "active_scvs.json")
+        self.project_root = get_project_root()
 
     def update_hud(self):
         try:
@@ -90,18 +124,10 @@ class AdjutantHUD:
                 # If bd fails, we just use defaults for mission status
                 pass
             
-            # 2. Get SCV status from telemetry registry
-            scv_count = 0
-            scv_list = []
-            if os.path.exists(self.registry_path):
-                with _registry_lock:
-                    try:
-                        with open(self.registry_path, "r") as f:
-                            registry = json.load(f)
-                            scv_count = len(registry)
-                            scv_list = sorted(list(registry.keys()))
-                    except (json.JSONDecodeError, IOError):
-                        pass
+            # 2. Get SCV status by scanning worktrees
+            registry = get_active_scvs(self.project_root)
+            scv_count = len(registry)
+            scv_list = sorted(list(registry.keys()))
 
             # Format title string
             # Title: Mission: {MISSION} | {PROGRESS}% | {CLOSED}/{TOTAL} | Open: {OPEN}, IP: {IN_PROGRESS}
@@ -640,16 +666,6 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
 
     logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
 
-def get_project_root() -> str:
-    """Gets the main project root, resolving from within worktrees if necessary."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    root = os.path.dirname(base_dir)
-    # Check if we are in an SCV worktree
-    if ".adjutant" in root and "worktrees" in root:
-        # Move up from .adjutant/worktrees/objective_id
-        root = os.path.dirname(os.path.dirname(os.path.dirname(root)))
-    return root
-
 def show_status():
     """Displays the current status of the Adjutant mission and active SCVs."""
     project_root = get_project_root()
@@ -687,31 +703,12 @@ def show_status():
 
     # List running SCVs
     print("\n--- Running SCVs ---")
-    registry_path = os.path.join(project_root, ".adjutant", "logs", "active_scvs.json")
-    if os.path.exists(registry_path):
-        try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-            
-            if not registry:
-                print("No active SCVs.")
-            else:
-                for obj_id, info in registry.items():
-                    pid = info.get("pid", "Unknown")
-                    agent = info.get("agent_name", "Unknown")
-                    model = info.get("model", "Unknown")
-                    
-                    # Check if actually running
-                    running = "Running"
-                    try:
-                        os.kill(int(pid), 0)
-                    except (ProcessLookupError, ValueError, TypeError):
-                        running = "Stopped"
-                    except PermissionError:
-                        running = "Active (No Permission)"
-                        
-                    print(f"[{obj_id}] Agent: {agent} | PID: {pid} | Status: {running} | Model: {model}")
-        except Exception as e:
-            print(f"Error reading SCV registry: {e}")
-    else:
+    registry = get_active_scvs(project_root)
+    if not registry:
         print("No active SCVs.")
+    else:
+        for obj_id, info in registry.items():
+            pid = info.get("pid", "Unknown")
+            agent = info.get("agent_name", "Unknown")
+            model = info.get("model", "Unknown")
+            print(f"[{obj_id}] Agent: {agent} | PID: {pid} | Status: Running | Model: {model}")

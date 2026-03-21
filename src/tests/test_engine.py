@@ -47,11 +47,10 @@ class TestAdjutantHUD(unittest.TestCase):
         expected_title = "\033]0;Mission: Test Mission | 0.0% | 0/0 | Open: 0, IP: 0\007"
         mock_write.assert_called_with(expected_title)
 
+    @patch("adjutant.engine.get_active_scvs")
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
-    @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open)
-    def test_update_hud_with_scvs(self, mock_open_file, mock_exists, mock_write, mock_check_output):
+    def test_update_hud_with_scvs(self, mock_write, mock_check_output, mock_get_scvs):
         # Mock 'bd status --json' output
         mock_check_output.return_value = json.dumps({
             "summary": {
@@ -62,19 +61,11 @@ class TestAdjutantHUD(unittest.TestCase):
             }
         }).encode()
         
-        # Mock registry exists and has SCVs
-        registry_data = {
+        # Mock get_active_scvs
+        mock_get_scvs.return_value = {
             "adjutant-sjz.3": {"pid": 123},
             "adjutant-sjz.4": {"pid": 456}
         }
-        
-        def exists_side_effect(path):
-            if "active_scvs.json" in path:
-                return True
-            return False
-            
-        mock_exists.side_effect = exists_side_effect
-        mock_open_file.return_value.__enter__.return_value.read.return_value = json.dumps(registry_data)
         
         hud = AdjutantHUD(mission="Test Mission")
         hud.update_hud()
@@ -83,11 +74,11 @@ class TestAdjutantHUD(unittest.TestCase):
         expected_title = "\033]0;Mission: Test Mission | 70.0% | 7/10 | Open: 3, IP: 0 | SCVs: 2 (sjz.3, sjz.4)\007"
         mock_write.assert_called_with(expected_title)
 
+    @patch("adjutant.engine.get_active_scvs")
     @patch("subprocess.check_output")
     @patch("sys.stdout.write")
-    @patch("os.path.exists")
-    def test_update_hud_edge_cases(self, mock_exists, mock_write, mock_check_output):
-        mock_exists.return_value = False
+    def test_update_hud_edge_cases(self, mock_write, mock_check_output, mock_get_scvs):
+        mock_get_scvs.return_value = {}
         hud = AdjutantHUD(mission="Test Mission")
 
         # Case 1: 0 issues
