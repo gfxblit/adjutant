@@ -1,4 +1,11 @@
 [[rule]]
+name = "Allow SCV-Coder to use git"
+toolName = "run_shell_command"
+commandPrefix = "git"
+decision = "allow"
+priority = 101
+
+[[rule]]
 name = "Allow SCV-Coder to use Beads CLI"
 toolName = "run_shell_command"
 commandPrefix = "bd"

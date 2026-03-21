@@ -236,7 +236,7 @@ class SyncOverseer:
                     try:
                         with open(self.registry_path, "r") as f:
                             active_objectives = list(json.load(f).keys())
-                    except:
+                    except (json.JSONDecodeError, IOError, KeyError):
                         pass
 
             for obj in objectives:
