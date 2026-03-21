@@ -178,41 +178,49 @@ class SCVOverseer:
         return registry
 
     def _check_scvs(self):
-        registry = self._get_registry_from_worktrees()
-        if not registry:
-            # If we found no SCVs in worktrees, ensure the legacy registry is also cleared
+        '''
+        Scans worktrees for SCVs, checks their running status, cleans up if necessary,
+        and updates the active_scvs.json registry file to reflect the current state.
+        '''
+        registry_from_worktrees = self._get_registry_from_worktrees()
+        
+        active_scvs_to_write = {}
+        
+        if not registry_from_worktrees:
+            # If no SCVs found in worktrees, clear the legacy registry file.
             if os.path.exists(self.registry_path):
                 with _registry_lock:
                     try:
-                        with open(self.registry_path, "r") as f:
-                            current = json.load(f)
-                        if current:
+                        # Only clear if it's not already empty to avoid unnecessary writes
+                        if os.path.getsize(self.registry_path) > 0: 
                             with open(self.registry_path, "w") as f:
                                 json.dump({}, f, indent=2)
-                    except:
-                        pass
-            return
+                            logger.info("[Overseer] Cleared active_scvs.json as no SCVs found in worktrees.")
+                    except (IOError, json.JSONDecodeError):
+                        logger.warning(f"[Overseer] Could not clear or read {self.registry_path}.")
+            return # Nothing more to do if no SCVs found
 
-        updated_registry = False
-        active_registry = {}
-
-        for objective_id, scv_info in registry.items():
+        # Iterate through SCVs found in worktrees
+        for objective_id, scv_info in registry_from_worktrees.items():
             pid = scv_info.get("pid")
             agent_name = scv_info.get("agent_name")
+            current_model = scv_info.get("model", self.MODELS[0]) # Get model for potential restart
             
+            # Check if the process is running. If not, clean it up.
             if pid and not is_process_running(pid):
                 log_path = os.path.join(self.telemetry_dir, f"{objective_id}.log")
-                should_cleanup = True
-
+                logger.warning(f"[Overseer] SCV for {objective_id} (PID: {pid}, Model: {current_model}) not running. Checking for restart conditions.")
+                
+                should_restart = False
+                # Check for specific crash conditions like capacity or quota errors
                 if os.path.exists(log_path):
                     try:
                         with open(log_path, "r") as f:
                             log_content = f.read()
                         
-                        current_model = scv_info.get("model", self.MODELS[0])
-                        # Detect capacity or quota errors
                         if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED", "TerminalQuotaError"]):
-                            logger.info(f"\n[Overseer] Detected capacity crash for SCV {objective_id} ({current_model}). Restarting with fallback model.")
+                            logger.info(f"[Overseer] Detected crash for {objective_id} ({current_model}). Attempting restart with fallback model.")
+                            should_restart = True
                             
                             next_model = None
                             try:
@@ -223,41 +231,35 @@ class SCVOverseer:
                                 next_model = self.MODELS[1] # fallback to flash
                             
                             if next_model:
+                                logger.info(f"[Overseer] Restarting {objective_id} with model: {next_model}")
                                 spawn_agent(agent_name, objective_id, starting_model=next_model)
-                                # spawn_agent updates the registry file directly
-                                # so we just skip adding it to active_registry here
-                                continue
+                                # If spawn_agent is successful, it will update the registry.
+                                # We don't add this SCV to active_scvs_to_write as it's being restarted.
+                                continue 
                             else:
-                                logger.info(f"[Overseer] All fallback models exhausted for {objective_id}.")
+                                logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting.")
                     except IOError:
-                        pass
+                        logger.warning(f"[Overseer] Could not read log file {log_path} for {objective_id}.")
                 
-                if should_cleanup:
+                # If not restarting, proceed with cleanup.
+                if not should_restart:
+                    logger.info(f"[Overseer] Cleaning up SCV for {objective_id} as it is not running and not eligible for restart.")
                     cleanup_scv(objective_id, self.project_root)
-                    updated_registry = True
             else:
-                active_registry[objective_id] = scv_info
+                # If running, add to the list that will be written to the registry file.
+                active_scvs_to_write[objective_id] = scv_info
                 
-        if updated_registry:
-            with _registry_lock:
-                try:
-                    # Reload registry to ensure we don't overwrite new spawns
-                    if os.path.exists(self.registry_path):
-                        with open(self.registry_path, "r") as f:
-                            latest_registry = json.load(f)
-                        # Only keep the ones we still consider active
-                        # and combine with any new spawns that happened in between
-                        for obj_id in list(latest_registry.keys()):
-                            # If it was in our original registry but not in active_registry, it's done
-                            if obj_id in registry and obj_id not in active_registry:
-                                del latest_registry[obj_id]
-                    else:
-                        latest_registry = active_registry
-
-                    with open(self.registry_path, "w") as f:
-                        json.dump(latest_registry, f, indent=2)
-                except IOError:
-                    pass
+        # Write the consolidated list of active SCVs found in worktrees to the registry file.
+        # This ensures active_scvs.json accurately reflects currently running SCVs based on worktree scan.
+        with _registry_lock:
+            try:
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(self.registry_path), exist_ok=True)
+                with open(self.registry_path, "w") as f:
+                    json.dump(active_scvs_to_write, f, indent=2)
+                logger.debug(f"[Overseer] Updated active_scvs.json with {len(active_scvs_to_write)} active SCVs.")
+            except IOError as e:
+                logger.error(f"[Overseer] Failed to write to {self.registry_path}: {e}")
 
     def _run(self):
         while not self.stop_event.is_set():
