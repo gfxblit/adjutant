@@ -30,7 +30,7 @@ class TestRecovery(unittest.TestCase):
         # Setup mocks
         project_root = "/tmp/project"
         worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
-        registry_path = os.path.join(project_root, ".beads", "telemetry", "active_scvs.json")
+        registry_path = os.path.join(project_root, ".adjutant", "logs", "active_scvs.json")
         
         def exists_side_effect(path):
             if path == worktrees_dir: return True

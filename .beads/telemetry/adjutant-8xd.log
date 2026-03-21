@@ -1,0 +1,32 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+WARNING: The following project-level hooks have been detected in this workspace:
+  - PYTHONPATH=src python -m adjutant.hooks
+
+These hooks will be executed. If you did not configure these hooks or do not trust this project,
+please review the project settings (.gemini/settings.json) and remove them.Error executing tool read_file: File size exceeds the 20MB limit.
+I have successfully unified the SCV lifecycle management into the `SCVOverseer` and resolved the race condition where `AdjutantHUD`'s `monitor_scvs` loop was prematurely cleaning up crashed processes.
+
+### Changes Summary:
+- **`src/adjutant/engine.py`**:
+    - Removed the redundant `monitor_scvs` function.
+    - Updated `AdjutantHUD._run` loop to remove the call to `monitor_scvs`.
+    - Enhanced `SCVOverseer._check_scvs` to handle the full lifecycle:
+        - If an SCV process is dead, it now checks the logs for quota/capacity errors.
+        - If a quota error is found, it triggers a restart with a fallback model (as before).
+        - If no quota error is found (normal termination or other crash), it calls `cleanup_scv` and removes the SCV from the registry.
+    - Implemented a more robust registry update mechanism in `SCVOverseer` that re-reads the registry from disk and checks the PID before removing an entry, preventing it from accidentally overwriting or removing a newly restarted SCV.
+- **`src/tests/test_scv_monitoring.py`**:
+    - Updated the test suite to verify `SCVOverseer`'s monitoring and cleanup capabilities instead of the removed `monitor_scvs` function.
+
+### Verification:
+- Ran the full test suite (`pytest src/tests/`), and all 26 tests passed, including the updated `test_scv_monitoring.py` and the existing `test_overseer.py`.
+
+The objective `adjutant-8xd` has been fulfilled and closed.
+
+---
+**SCV Watchdog Race Condition: FIXED**
+*Status: Closed*

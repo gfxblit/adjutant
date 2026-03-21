@@ -1,0 +1,96 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+WARNING: The following project-level hooks have been detected in this workspace:
+  - PYTHONPATH=src python -m adjutant.hooks
+
+These hooks will be executed. If you did not configure these hooks or do not trust this project,
+please review the project settings (.gemini/settings.json) and remove them.Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-20T02-34-15-840Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 10h29m12s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 10h29m12s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 37752165.159878,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-20T02-57-25-678Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 10h6m2s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 10h6m2s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 36362334.48283,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5738ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 10458ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5124ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5794ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 11505ms...
+Attempt 3 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 23825ms...
+Attempt 4 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 34138ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5438ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 1s.. Retrying after 5450ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5348ms...
+missing pgrep output
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5066ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5862ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 10968ms...
+Error executing tool read_file: File not found.
+I've completed the refactoring of `src/adjutant/engine.py` to use `bd worktree create` and `bd worktree remove` instead of direct `git worktree` calls. This ensures better beads database linking (via automatic `.beads/redirect` files) and leverages the safety checks provided by the `bd` CLI.
+
+**Summary of Changes:**
+1.  **Engine Refactoring**:
+    *   In `spawn_agent`, replaced `git worktree add -b` with `bd worktree create --branch`.
+    *   In `cleanup_scv`, replaced `git worktree remove --force` with `bd worktree remove --force`.
+2.  **Test Updates**:
+    *   Updated `src/tests/test_engine_spawning.py` to verify the `bd worktree create` call with appropriate arguments.
+    *   Updated `src/tests/test_scv_monitoring.py` to verify the `bd worktree remove` call.
+3.  **Verification**:
+    *   Ran `pytest src/tests/test_engine_spawning.py` (3 passed).
+    *   Ran `pytest src/tests/test_scv_monitoring.py` (2 passed).
+    *   Ran `pytest src/tests/test_engine.py` (10 passed).
+    *   Successfully closed the objective bead `adjutant-5ww`.
+
+**Discovery Note**: During execution, I found that the current worktree lacked a proper `.beads/redirect` file, causing `bd` to fail status checks without explicit `BEADS_DIR` environment variables. The migration to `bd worktree create` will prevent this issue for all future SCV agents spawned by the Adjutant engine.
+
+Mission accomplished. Closing bead.
+
+```bash
+bd close adjutant-5ww
+```

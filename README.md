@@ -40,7 +40,7 @@ The Adjutant can call upon specialized sub-agents:
 - **`scv-coder`**: Handles implementation, refactoring, and bug fixes.
 - **`scv-tester`**: Handles verification, running tests, and managing test failures (Red Alert Pivots).
 
-Sub-agents are spawned **asynchronously** in the background. Their execution is headless, and all output is captured in telemetry logs located at `.beads/telemetry/<objective_id>.log`.
+Sub-agents are spawned **asynchronously** in the background. Their execution is headless, and all output is captured in telemetry logs located at `.adjutant/logs/<objective_id>.log`.
 
 ## The Workflow
 

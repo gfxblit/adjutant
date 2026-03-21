@@ -62,7 +62,7 @@ class AdjutantHUD:
         # Find project root
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.project_root = os.path.dirname(base_dir)
-        self.registry_path = os.path.join(self.project_root, ".beads", "telemetry", "active_scvs.json")
+        self.registry_path = os.path.join(self.project_root, ".adjutant", "logs", "active_scvs.json")
 
     def update_hud(self):
         try:
@@ -149,7 +149,7 @@ class SCVOverseer:
         self.thread = None
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.project_root = os.path.dirname(self.base_dir)
-        self.telemetry_dir = os.path.join(self.project_root, ".beads", "telemetry")
+        self.telemetry_dir = os.path.join(self.project_root, ".adjutant", "logs")
         self.registry_path = os.path.join(self.telemetry_dir, "active_scvs.json")
 
     def _check_scvs(self):
@@ -253,7 +253,7 @@ class SyncOverseer:
         self.thread = None
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.project_root = os.path.dirname(base_dir)
-        self.registry_path = os.path.join(self.project_root, ".beads", "telemetry", "active_scvs.json")
+        self.registry_path = os.path.join(self.project_root, ".adjutant", "logs", "active_scvs.json")
 
     def _check_sync(self):
         try:
@@ -396,7 +396,7 @@ def recover_orphaned_scvs(project_root: str):
     if not os.path.exists(worktrees_dir):
         return
 
-    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
     registry_path = os.path.join(telemetry_dir, "active_scvs.json")
     
     registry = {}
@@ -467,7 +467,7 @@ def run_adjutant_agent(initial_directive: str):
     project_root = os.path.dirname(base_dir)
 
     # Setup logging to file by default for the interactive session
-    log_path = os.path.join(project_root, ".beads", "telemetry", "adjutant.log")
+    log_path = os.path.join(project_root, ".adjutant", "logs", "adjutant.log")
     setup_logging(to_stdout=False, log_file=log_path)
 
     logger.info("\n[Adjutant Online: Initiating Mission Planning]")
@@ -567,7 +567,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         else:
             raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
 
-    telemetry_dir = os.path.join(project_root, ".beads", "telemetry")
+    telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
     os.makedirs(telemetry_dir, exist_ok=True)
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
     
@@ -675,7 +675,7 @@ def show_status():
 
     # List running SCVs
     print("\n--- Running SCVs ---")
-    registry_path = os.path.join(project_root, ".beads", "telemetry", "active_scvs.json")
+    registry_path = os.path.join(project_root, ".adjutant", "logs", "active_scvs.json")
     if os.path.exists(registry_path):
         try:
             with open(registry_path, "r") as f:

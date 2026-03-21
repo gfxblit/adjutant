@@ -1,0 +1,39 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+WARNING: The following project-level hooks have been detected in this workspace:
+  - PYTHONPATH=src python -m adjutant.hooks
+
+These hooks will be executed. If you did not configure these hooks or do not trust this project,
+please review the project settings (.gemini/settings.json) and remove them.Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-20T02-36-23-566Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 10h27m4s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 10h27m4s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 37624443.662255,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+[WARN] Skipping unreadable directory: /Users/billyc/projects/adjutant/.adjutant/worktrees/adjutant-flc (Directory does not exist: /Users/billyc/projects/adjutant/.adjutant/worktrees/adjutant-flc)
+An unexpected critical error occurred:Error: Directory does not exist: /Users/billyc/projects/adjutant/.adjutant/worktrees/adjutant-flc
+    at WorkspaceContext.resolveAndValidateDir (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/workspaceContext.js:117:19)
+    at WorkspaceContext.addDirectories (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/workspaceContext.js:78:39)
+    at WorkspaceContext.addDirectory (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/workspaceContext.js:62:29)
+    at new WorkspaceContext (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/workspaceContext.js:28:14)
+    at new Config (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/config/config.js:339:33)
+    at new ExtensionManager (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/config/extension-manager.js:43:32)
+    at loadCliConfig (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/config/config.js:332:30)
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:262:27)

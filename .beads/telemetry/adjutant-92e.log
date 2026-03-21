@@ -1,0 +1,52 @@
+--- Spawning sub-agent with model: gemini-3.1-pro-preview ---
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-19T23-07-27-491Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 13h56m0s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 13h56m0s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 50160531.407124,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+\n[!] Model gemini-3.1-pro-preview failed. Trying next fallback...
+--- Spawning sub-agent with model: gemini-3-flash-preview ---
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5120ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 1s.. Retrying after 11259ms...
+Error executing tool read_file: File size exceeds the 20MB limit.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5821ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5156ms...
+I have implemented the SCV Overseer watchdog as a Python-based daemon thread within `engine.py`. 
+
+### Key Improvements:
+1.  **Robust Quota Recovery**: The `SCVOverseer` now monitors the registry and telemetry logs specifically for `MODEL_CAPACITY_EXHAUSTED`, `RESOURCE_EXHAUSTED`, and `429` errors.
+2.  **Fallback Model Chain**: Implemented a fallback chain: `gemini-3.1-pro-preview` -> `gemini-3-flash-preview` -> `gemini-2.5-flash-lite`. The Overseer detects which model was previously used and restarts with the next one in the chain.
+3.  **Registry Integration**: Updated the active SCV registry (`active_scvs.json`) to store the current model info along with the PID, allowing the Overseer to track and execute the fallback logic accurately.
+4.  **Simplified Spawning**: Refactored `spawn_agent` to launch `gemini` processes directly, removing the redundant bash-based fallback loop and ensuring the Overseer captures the true agent PID for monitoring.
+5.  **Verified Stability**: Verified all changes with comprehensive unit tests in `src/tests/test_overseer.py` and updated existing spawning tests.
+
+All tests passed (24/24), and linting is clean. The system is now significantly more resilient to mid-mission quota failures.
+
+```bash
+Mission accomplished. SCV Overseer online.
+```

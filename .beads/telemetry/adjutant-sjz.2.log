@@ -1,0 +1,56 @@
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+WARNING: The following project-level hooks have been detected in this workspace:
+  - PYTHONPATH=src python -m adjutant.hooks
+
+These hooks will be executed. If you did not configure these hooks or do not trust this project,
+please review the project settings (.gemini/settings.json) and remove them.Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-20T02-56-08-170Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 10h7m19s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 10h7m19s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 36439838.002372004,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5422ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 10682ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5512ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 10290ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5683ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5533ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5540ms...
+The `AdjutantHUD` class in `src/adjutant/engine.py` has been extended to read and report the status of active SCV deployments from the telemetry registry (`.beads/telemetry/active_scvs.json`). 
+
+Key changes:
+1.  **Registry Path Detection**: `AdjutantHUD` now calculates the project root and registry path upon initialization, similar to `SCVOverseer`.
+2.  **SCV Status Reporting**: The `update_hud` method now reads the active SCV registry and appends SCV information to the terminal title bar (e.g., `SCVs: 2 (sjz.3, sjz.4)`).
+3.  **Robust Error Handling**: Improved `update_hud` to handle cases where the `bd` CLI might fail (e.g., due to the reported dolt circuit breaker issue), ensuring that SCV status is still reported even if mission status is unavailable.
+4.  **Unit Tests**: Added comprehensive unit tests in `src/tests/test_hud_scv.py` covering various scenarios, including multiple SCVs, no SCVs, and `bd` failures. All existing tests in `src/tests/test_engine.py` also pass.
+
+Verified the implementation with `pytest` and `ruff`.
+
+```bash
+Mission: Example | 70.0% | Open: 3, Closed: 7 | SCVs: 2 (sjz.3, sjz.4)
+```
+
+The objective `adjutant-sjz.2` has been closed.

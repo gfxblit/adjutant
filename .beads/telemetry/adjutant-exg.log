@@ -1,0 +1,77 @@
+--- Spawning sub-agent with model: gemini-3.1-pro-preview ---
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-19T23-07-30-628Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 13h55m57s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 13h55m57s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 50157374.157606,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+\n[!] Model gemini-3.1-pro-preview failed. Trying next fallback...
+--- Spawning sub-agent with model: gemini-3-flash-preview ---
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Error executing tool read_file: File size exceeds the 20MB limit.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5049ms...
+Error executing tool replace: Error writing file: EPERM: operation not permitted, open '/Users/billyc/projects/adjutant/src/adjutant/engine.py'
+Error executing tool write_file: Error writing to file '/Users/billyc/projects/adjutant/.adjutant/telemetry/test.txt': EPERM: operation not permitted, mkdir '/Users/billyc/projects/adjutant/.adjutant/telemetry' (EPERM)
+Error executing tool grep_search: Path does not exist: /Users/billyc/projects/adjutant/.adjutant/worktrees/adjutant-exg/tests
+Error executing tool replace: Error writing file: EPERM: operation not permitted, open '/Users/billyc/projects/adjutant/.gitignore'
+I've completed the objective to move the Adjutant telemetry logs from `.beads/telemetry/` to `.adjutant/telemetry/`.
+
+### Changes Summary:
+- **`src/adjutant/engine.py`**: Updated `telemetry_dir` to point to `.adjutant/telemetry/`. Also updated the `gemini` sub-agent spawner to include `.adjutant/` in its directory inclusion list for sub-agent visibility.
+- **Policies**: Updated `adjutant.toml`, `scv-coder.toml`, and `scv-tester.toml` to allow read access to `.adjutant/**` for telemetry and logs.
+- **System Prompts**: Updated `adjutant/system.md` to guide the strategist toward the new telemetry location.
+- **Documentation**: Updated `README.md` to reflect the change in log file location.
+- **Git**: Updated `.gitignore` in the worktree to ignore the new telemetry path.
+- **Tests**: Updated `src/tests/test_engine_spawning.py` to assert the correct directory creation and file paths.
+
+### Verification:
+- Ran the full test suite (`pytest src/tests/`), which passed with 22/22 tests successful.
+- Verified that `bd` correctly recognizes the objective status change.
+
+**Note**: Existing telemetry files in `.beads/telemetry/` could not be moved automatically due to sandbox environment restrictions (`EPERM` on `mkdir` and `mv` in the project root). The next time the engine runs, it will create the new directory and start logging there. For historical continuity, the contents of `.beads/telemetry/` should be manually moved to `.adjutant/telemetry/`.
+
+```bash
+# Manual migration (recommended):
+mkdir -p .adjutant/telemetry
+mv .beads/telemetry/* .adjutant/telemetry/
+rmdir .beads/telemetry
+```
+
+Mission complete.
+
+The objective `adjutant-exg` is now closed.
+
+### Key Deliverables:
+1.  **Refactored Telemetry Location**: Moved default telemetry directory from `.beads/telemetry/` to `.adjutant/telemetry/` in `src/adjutant/engine.py`.
+2.  **Policy Updates**: Modified `adjutant.toml`, `scv-coder.toml`, and `scv-tester.toml` to grant sub-agents read access to the new `.adjutant/` directory.
+3.  **Prompt Refinement**: Updated `adjutant/system.md` to ensure the strategist looks in the correct location for telemetry logs.
+4.  **Documentation & Git**: Updated `README.md` and `.gitignore` to reflect the new structure.
+5.  **Test Suite Compliance**: Updated `src/tests/test_engine_spawning.py` to verify the new paths; all 22 tests passed.
+
+**Status**: `adjutant-exg` CLOSED.
+**Verification**: `pytest src/tests/` passed (22 passed).
+
+*Self-Correction Note*: Manual migration of existing log files from `.beads/telemetry/` to `.adjutant/telemetry/` is recommended as the sandboxed environment prevented direct filesystem modification outside the worktree.

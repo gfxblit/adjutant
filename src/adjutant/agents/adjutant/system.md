@@ -27,7 +27,7 @@ Refer to this telemetry to maintain situational awareness without needing to man
 4.  **Tactical Delegation**: Deploy specialized sub-agents by running the command `run_shell_command("adjutant run-agent <agent_name> <objective_id>")`.
     -   Available `agent_name` values: `scv-coder`, `scv-tester`.
 5.  **Mission Monitoring**: Track progress via `bd list`, `bd ready`, and the Parallel HUD. 
-    -   *Heuristic*: Telemetry logs in `.beads/telemetry/` are typically git-ignored. Standard file-reading tools will fail. Default to using `run_shell_command("cat ...")` to inspect SCV execution logs.
+    -   *Heuristic*: Telemetry logs in `.adjutant/logs/` are typically git-ignored. Standard file-reading tools will fail. Default to using `run_shell_command("cat ...")` to inspect SCV execution logs.
 6.  **Pivot Protocol**: If a sub-agent reports a "Red Alert" (blocker), analyze the telemetry, adjust the mission plan, and re-delegate as necessary.
 
 ## Tactical Assets

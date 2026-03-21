@@ -1,0 +1,72 @@
+--- Spawning sub-agent with model: gemini-3.1-pro-preview ---
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Error when talking to Gemini API Full report available at: /var/folders/66/23gyvw0s257998ns9ty5p0mc0000gp/T/gemini-client-error-Turn.run-sendMessageStream-2026-03-19T23-07-32-638Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 13h55m55s.
+    at classifyGoogleError (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:252:28)
+    at retryWithBackoff (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:153:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:440:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:266:40)
+    at async Turn.run (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:71:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:487:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:605:20)
+    at async file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:194:34
+    at async main (file:///opt/homebrew/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:544:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 13h55m55s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 50155364.068959996,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
+\n[!] Model gemini-3.1-pro-preview failed. Trying next fallback...
+--- Spawning sub-agent with model: gemini-3-flash-preview ---
+YOLO mode is enabled. All tool calls will be automatically approved.
+Keychain initialization encountered an error: An unknown error occurred.
+Using FileKeychain fallback for secure storage.
+Loaded cached credentials.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5748ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 11662ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 5397ms...
+I've integrated SCV process monitoring, git worktree cleanup, and branch pushing into the Adjutant engine.
+
+### Changes Implemented:
+1.  **SCV Monitoring Loop**: Added a `monitor_scvs` function that checks the active SCV registry (`active_scvs.json`) and detects when processes have finished.
+2.  **Worktree Cleanup**: Implemented a `cleanup_scv` function that:
+    -   Pushes the SCV's branch to `origin`.
+    -   Force-removes the isolated git worktree.
+    -   Cleans up the resolved system prompt files.
+3.  **AdjutantHUD Integration**: The monitoring loop is now part of the `AdjutantHUD` background thread, ensuring that SCVs are cleaned up automatically while the Adjutant is running.
+4.  **Unit Tests**: Added comprehensive tests in `src/tests/test_scv_monitoring.py` to verify both the monitoring detection and the cleanup/push logic.
+
+### Blockers and Next Steps:
+*   **Sandbox Issue**: During this session, I discovered that the current SCV sandbox (`--sandbox`) restricts write access to the main repo's `.git/worktrees/` metadata directory. This prevents SCV-Coders from committing or pushing their own work from within the worktree. I've filed a bug report for this: **adjutant-dm9**.
+*   **Final Commit**: Because of the sandbox restriction, I was unable to commit these changes from within the worktree. They are currently staged in the worktree's `src/` directory. The Adjutant (or the user) should commit these changes from the root repository.
+
+```bash
+# Recommended command for the user to commit these changes:
+git add src/adjutant/engine.py src/tests/test_scv_monitoring.py
+git commit -m "feat: implement SCV monitoring loop with worktree cleanup and branch pushing"
+```
+
+I have closed objective `adjutant-ffi.3`.
+
+### Quality Gates:
+All 22 tests (including the new monitoring tests) passed successfully.
+
+```bash
+PYTHONPATH=src pytest src/tests/test_scv_monitoring.py src/tests/test_engine.py src/tests/test_engine_spawning.py src/tests/test_cli_subcommands.py src/tests/test_hooks.py
+============================== 22 passed in 0.39s ==============================
+```
+
+MISSION ACCOMPLISHED (logic-wise). LANDING THE PLANE (manually required).
+
+<mission_accomplished>
+adjutant-ffi.3: Integrated SCV monitoring, cleanup, and branch pushing. Blocked from committing by sandbox (adjutant-dm9).
+</mission_accomplished>
