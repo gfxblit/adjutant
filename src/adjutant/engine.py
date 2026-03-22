@@ -571,7 +571,7 @@ def show_status():
         titles = {obj["id"]: obj["title"] for obj in objectives}
         
         # Combine IDs from bd and running SCVs
-        all_ids = sorted(list(ip_ids | set(registry.keys())))
+        all_ids = sorted(ip_ids | registry.keys())
         
         if not all_ids:
             print("  (None)")
