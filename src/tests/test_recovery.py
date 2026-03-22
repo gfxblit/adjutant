@@ -107,9 +107,6 @@ class TestRecovery(unittest.TestCase):
         # 2. Push call
         mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
         
-        # 3. Worktree remove call (always uses --force)
-        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
-        
         # 4. Resolved prompt cleanup
         mock_remove.assert_called_with(resolved_path)
 
@@ -140,7 +137,6 @@ class TestRecovery(unittest.TestCase):
         
         # Verify that other steps were still attempted
         mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
-        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
         mock_remove.assert_called_with(resolved_path)
         
         # Verify logger was called for the failure
@@ -183,41 +179,6 @@ class TestRecovery(unittest.TestCase):
     @patch("subprocess.run")
     @patch("os.path.exists")
     @patch("os.remove")
-    def test_cleanup_scv_remove_failure(self, mock_remove, mock_exists, mock_run, mock_logger):
-        project_root = "/tmp/project"
-        objective_id = "test-obj"
-        worktree_path = os.path.join(project_root, ".adjutant", "worktrees", objective_id)
-        resolved_path = os.path.join(project_root, ".adjutant", "worktrees", f".resolved_system_{objective_id}.md")
-        
-        def exists_side_effect(path):
-            return True # Assume everything exists
-        mock_exists.side_effect = exists_side_effect
-        
-        # Mock subprocess.run to raise exception for 'bd worktree remove' command
-        def run_side_effect(cmd, **kwargs):
-            if "bd" in cmd and "worktree" in cmd and "remove" in cmd:
-                raise Exception("Worktree removal failed")
-            return MagicMock(returncode=0)
-            
-        mock_run.side_effect = run_side_effect
-        
-        # This should not raise an exception, but log the error
-        cleanup_scv(objective_id, project_root)
-        
-        # Verify that steps before removal were attempted
-        mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
-        mock_run.assert_any_call(["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"], cwd=worktree_path, check=False, capture_output=True, text=True)
-        mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
-        # Worktree remove should be called, but it will fail
-        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
-        
-        # Verify logger was called for the failure
-        mock_logger.error.assert_any_call("An unexpected error occurred during 'bd worktree remove' for /tmp/project/.adjutant/worktrees/test-obj: Worktree removal failed")
-
-    @patch("adjutant.engine.logger")
-    @patch("subprocess.run")
-    @patch("os.path.exists")
-    @patch("os.remove")
     def test_cleanup_scv_resolved_path_remove_failure(self, mock_remove, mock_exists, mock_run, mock_logger):
         project_root = "/tmp/project"
         objective_id = "test-obj"
@@ -241,7 +202,6 @@ class TestRecovery(unittest.TestCase):
         mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
         mock_run.assert_any_call(["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"], cwd=worktree_path, check=False, capture_output=True, text=True)
         mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
-        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
         # Resolved path remove should be called, but it will fail
         mock_remove.assert_called_with(resolved_path)
         

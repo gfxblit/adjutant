@@ -29,15 +29,6 @@ class TestSCVMonitoring(unittest.TestCase):
             text=True
         )
         
-        # Verify bd worktree remove
-        mock_run.assert_any_call(
-            ["bd", "worktree", "remove", "--force", worktree_path],
-            cwd=project_root,
-            check=False,
-            capture_output=True,
-            text=True
-        )
-        
         # Verify prompt removal
         mock_remove.assert_called_once_with(prompt_path)
 

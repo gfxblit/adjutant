@@ -342,30 +342,7 @@ def cleanup_scv(objective_id: str, project_root: str):
         # Catch any other unexpected errors during the git push process.
         logger.error(f"An unexpected error occurred during git push for {branch_name}: {e}")
 
-    # 4. Cleanup worktree using 'bd worktree remove --force'
-    try:
-        # Use --force to ensure cleanup even if there are unpushed commits (though we try to push above).
-        res = subprocess.run(
-            ["bd", "worktree", "remove", "--force", worktree_path],
-            cwd=project_root,
-            check=False, # Do not fail script if bd remove fails, just log it.
-            capture_output=True,
-            text=True
-        )
-        if res.returncode == 0:
-            logger.info(f"Successfully removed worktree at {worktree_path} via 'bd worktree'.")
-        else:
-            # Log error with stderr content for clarity on removal failure.
-            logger.error(f"Failed to remove worktree {worktree_path} via 'bd worktree' (exit code {res.returncode}): {res.stderr.strip()}")
-        
-        # Double check if directory still exists after bd command, log an error if it does.
-        if os.path.exists(worktree_path):
-            logger.error(f"Worktree directory STILL exists at {worktree_path} after 'bd worktree remove' attempt. Manual intervention may be required.")
-    except Exception as e:
-        # Catch any other unexpected errors during the 'bd worktree remove' process.
-        logger.error(f"An unexpected error occurred during 'bd worktree remove' for {worktree_path}: {e}")
-
-    # 5. Cleanup resolved system prompt
+    # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
