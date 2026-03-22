@@ -94,17 +94,20 @@ class TestRecovery(unittest.TestCase):
             return False
         mock_exists.side_effect = exists_side_effect
         
+        # Setup mock return value to avoid errors in logging
+        mock_run.return_value.returncode = 0
+        
         cleanup_scv(objective_id, project_root)
         
         # 1. Auto-commit calls
-        mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, check=False, capture_output=True)
-        mock_run.assert_any_call(["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"], cwd=worktree_path, check=False, capture_output=True)
+        mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, capture_output=True, text=True, check=False)
+        mock_run.assert_any_call(["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"], cwd=worktree_path, capture_output=True, text=True, check=False)
         
         # 2. Push call
-        mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
+        mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, capture_output=True, text=True, check=False)
         
         # 3. Worktree remove call
-        mock_run.assert_any_call(["bd", "worktree", "remove", worktree_path, "--force"], cwd=project_root, check=False, capture_output=True, text=True)
+        mock_run.assert_any_call(["bd", "worktree", "remove", worktree_path, "--force"], cwd=project_root, capture_output=True, text=True, check=False)
         
         # 4. Resolved prompt cleanup
         mock_remove.assert_called_with(resolved_path)
