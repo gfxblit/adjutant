@@ -341,6 +341,7 @@ class SyncOverseer:
 def cleanup_scv(objective_id: str, project_root: str):
     """
     Cleans up the git worktree and pushes the branch to origin.
+    Added more robust error handling and logging.
     """
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     worktree_path = os.path.join(worktrees_dir, objective_id)
@@ -349,59 +350,94 @@ def cleanup_scv(objective_id: str, project_root: str):
 
     logger.info(f"\n[Cleaning up SCV for {objective_id}]")
 
-    # 1. Auto-commit any pending changes in the worktree
-    if os.path.exists(worktree_path):
-        try:
-            subprocess.run(
-                ["git", "add", "."],
-                cwd=worktree_path,
-                check=False,
-                capture_output=True
-            )
-            subprocess.run(
-                ["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"],
-                cwd=worktree_path,
-                check=False,
-                capture_output=True
-            )
-            logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
-        except Exception as e:
-            logger.info(f"Failed to auto-commit in worktree {worktree_path}: {e}")
+    # 1. Check if worktree exists before proceeding
+    if not os.path.exists(worktree_path):
+        logger.info(f"Worktree for {objective_id} does not exist at {worktree_path}. Skipping cleanup.")
+        # Still attempt to clean up the resolved system prompt if it exists
+        if os.path.exists(resolved_system_prompt_path):
+            try:
+                os.remove(resolved_system_prompt_path)
+                logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
+            except Exception as e:
+                logger.error(f"Failed to remove resolved system prompt: {e}")
+        return
 
-    # 2. Push the branch
+    # 2. Auto-commit any pending changes in the worktree
     try:
-        subprocess.run(
-            ["git", "push", "origin", branch_name],
-            cwd=project_root,
+        # Use check=True for git add to ensure staging errors are caught.
+        subprocess.run(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
+        logger.debug(f"Staged all changes in {worktree_path}.")
+
+        # Commit with check=False because 'nothing to commit' is a valid, non-error state.
+        res = subprocess.run(
+            ["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"],
+            cwd=worktree_path,
             check=False,
             capture_output=True,
             text=True
         )
-        logger.info(f"Pushed branch {branch_name} to origin.")
+        if res.returncode == 0:
+            logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
+        elif "nothing to commit" not in (res.stdout + res.stderr).lower():
+            # Log as an error if the exit code is non-zero and it's not the "nothing to commit" message.
+            logger.error(f"Failed to auto-commit in {worktree_path} (exit code {res.returncode}): {res.stderr.strip()}")
+        else:
+            logger.debug("No new changes to commit.")
+    except subprocess.CalledProcessError as e:
+        # Log detailed error if git add fails.
+        logger.error(f"Error staging changes in {worktree_path}: {e.stderr.strip()}")
     except Exception as e:
-        logger.info(f"Failed to push branch {branch_name}: {e}")
+        # Catch any other unexpected errors during the auto-commit process.
+        logger.error(f"An unexpected error occurred during auto-commit for {worktree_path}: {e}")
 
-    # 3. Cleanup worktree
-    if os.path.exists(worktree_path):
-        try:
-            subprocess.run(
-                ["bd", "worktree", "remove", worktree_path],
-                cwd=project_root,
-                check=False,
-                capture_output=True,
-                text=True
-            )
-            logger.info(f"Removed worktree at {worktree_path} via 'bd worktree'")
-        except Exception as e:
-            logger.info(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
+    # 3. Push the branch
+    try:
+        res = subprocess.run(
+            ["git", "push", "origin", branch_name],
+            cwd=project_root,
+            check=False, # Do not fail script if push fails, just log it.
+            capture_output=True,
+            text=True
+        )
+        if res.returncode == 0:
+            logger.info(f"Pushed branch {branch_name} to origin.")
+        else:
+            # Log error with stderr content for clarity on push failure.
+            logger.error(f"Failed to push branch {branch_name} (exit code {res.returncode}): {res.stderr.strip()}")
+    except Exception as e:
+        # Catch any other unexpected errors during the git push process.
+        logger.error(f"An unexpected error occurred during git push for {branch_name}: {e}")
 
-    # 4. Cleanup resolved system prompt
+    # 4. Cleanup worktree using 'bd worktree remove --force'
+    try:
+        # Use --force to ensure cleanup even if there are unpushed commits (though we try to push above).
+        res = subprocess.run(
+            ["bd", "worktree", "remove", "--force", worktree_path],
+            cwd=project_root,
+            check=False, # Do not fail script if bd remove fails, just log it.
+            capture_output=True,
+            text=True
+        )
+        if res.returncode == 0:
+            logger.info(f"Successfully removed worktree at {worktree_path} via 'bd worktree'.")
+        else:
+            # Log error with stderr content for clarity on removal failure.
+            logger.error(f"Failed to remove worktree {worktree_path} via 'bd worktree' (exit code {res.returncode}): {res.stderr.strip()}")
+        
+        # Double check if directory still exists after bd command, log an error if it does.
+        if os.path.exists(worktree_path):
+            logger.error(f"Worktree directory STILL exists at {worktree_path} after 'bd worktree remove' attempt. Manual intervention may be required.")
+    except Exception as e:
+        # Catch any other unexpected errors during the 'bd worktree remove' process.
+        logger.error(f"An unexpected error occurred during 'bd worktree remove' for {worktree_path}: {e}")
+
+    # 5. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
             logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
         except Exception as e:
-            logger.info(f"Failed to remove resolved system prompt: {e}")
+            logger.error(f"Failed to remove resolved system prompt: {e}")
 
 
 def recover_orphaned_scvs(project_root: str):
