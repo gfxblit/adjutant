@@ -366,7 +366,7 @@ def cleanup_scv(objective_id: str, project_root: str):
             )
             logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
         except Exception as e:
-            logger.info(f"Failed to auto-commit in worktree {worktree_path}: {e}")
+            logger.info(f"Failed to auto-commit worktree {objective_id}: {e}")
 
     # 2. Push the branch
     try:
@@ -393,7 +393,7 @@ def cleanup_scv(objective_id: str, project_root: str):
             )
             logger.info(f"Removed worktree at {worktree_path} via 'bd worktree' (force=True)")
         except Exception as e:
-            logger.info(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
+            logger.info(f"Failed to remove worktree {objective_id}: {e}")
 
     # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
@@ -401,7 +401,7 @@ def cleanup_scv(objective_id: str, project_root: str):
             os.remove(resolved_system_prompt_path)
             logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
         except Exception as e:
-            logger.info(f"Failed to remove resolved system prompt: {e}")
+            logger.info(f"Failed to remove resolved prompt file {objective_id}: {e}")
 
 
 def recover_orphaned_scvs(project_root: str):
