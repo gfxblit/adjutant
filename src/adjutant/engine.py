@@ -12,6 +12,8 @@ logger = logging.getLogger("adjutant")
 
 def format_duration(iso_date: str) -> str:
     """Formats the duration from iso_date until now as a short string (e.g., 2h15m)."""
+    if not iso_date or not isinstance(iso_date, str):
+        return "???"
     try:
         # datetime.fromisoformat in older versions of Python doesn't handle 'Z' well.
         # Python 3.11+ does, but for safety we replace Z with +00:00.
