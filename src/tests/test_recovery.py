@@ -104,7 +104,7 @@ class TestRecovery(unittest.TestCase):
         mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
         
         # 3. Worktree remove call
-        mock_run.assert_any_call(["bd", "worktree", "remove", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
+        mock_run.assert_any_call(["bd", "worktree", "remove", worktree_path, "--force"], cwd=project_root, check=False, capture_output=True, text=True)
         
         # 4. Resolved prompt cleanup
         mock_remove.assert_called_with(resolved_path)

@@ -385,7 +385,7 @@ def cleanup_scv(objective_id: str, project_root: str):
     if os.path.exists(worktree_path):
         try:
             subprocess.run(
-                ["bd", "worktree", "remove", worktree_path],
+                ["bd", "worktree", "remove", worktree_path, "--force"],
                 cwd=project_root,
                 check=False,
                 capture_output=True,

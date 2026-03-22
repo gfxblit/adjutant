@@ -31,7 +31,7 @@ class TestSCVMonitoring(unittest.TestCase):
         
         # Verify bd worktree remove
         mock_run.assert_any_call(
-            ["bd", "worktree", "remove", worktree_path],
+            ["bd", "worktree", "remove", worktree_path, "--force"],
             cwd=project_root,
             check=False,
             capture_output=True,
