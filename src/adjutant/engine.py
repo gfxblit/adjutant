@@ -272,72 +272,6 @@ class SCVOverseer:
             self.thread.join(timeout=1.0)
 
 
-class SyncOverseer:
-    def __init__(self, interval: int = 300): # 5 minutes
-        self.interval = interval
-        self.stop_event = threading.Event()
-        self.thread = None
-        self.project_root = get_project_root()
-
-    def _check_sync(self):
-        try:
-            # 1. Fetch origin main to get latest state
-            subprocess.run(["git", "fetch", "origin", "main"], cwd=self.project_root, capture_output=True, check=False)
-            
-            # 2. Get list of open objectives from bd
-            output = subprocess.check_output(["bd", "list", "--json"], cwd=self.project_root, text=True)
-            objectives = json.loads(output)
-            
-            # 3. Get active SCVs to avoid spawning multiple agents for same objective
-            active_scvs = get_active_scvs(self.project_root)
-            active_objectives = list(active_scvs.keys())
-
-            for obj in objectives:
-                obj_id = obj["id"]
-                if obj["status"] != "open" or obj_id in active_objectives:
-                    continue
-                
-                branch_name = f"scv/{obj_id}"
-                # Check if branch exists
-                res = subprocess.run(["git", "show-ref", "--verify", f"refs/heads/{branch_name}"], cwd=self.project_root, capture_output=True)
-                if res.returncode != 0:
-                    continue
-                
-                # Check if behind origin/main
-                res = subprocess.run(["git", "rev-list", "--count", f"{branch_name}..origin/main"], cwd=self.project_root, capture_output=True, text=True)
-                if res.returncode == 0:
-                    count = int(res.stdout.strip())
-                    if count > 0:
-                        logger.info(f"\n[SyncOverseer] Objective {obj_id} is behind origin/main by {count} commits. Triggering sync.")
-                        directive = (
-                            f"Sync branch '{branch_name}' with 'origin/main' using 'git pull --rebase origin main'. "
-                            "MANDATORY: Resolve any conflicts and force-push the results. "
-                            "If you cannot resolve conflicts automatically, report a 'Red Alert' in your telemetry and stop. "
-                            "Otherwise, close this objective only if it was a dedicated sync task, "
-                            "or just finish if you are an SCV-Coder resuming work."
-                        )
-                        spawn_agent("scv-coder", obj_id, directive=directive)
-
-        except Exception:
-            pass
-
-    def _run(self):
-        while not self.stop_event.is_set():
-            self._check_sync()
-            self.stop_event.wait(self.interval)
-
-    def start(self):
-        if self.thread is None or not self.thread.is_alive():
-            self.stop_event.clear()
-            self.thread = threading.Thread(target=self._run, daemon=True)
-            self.thread.start()
-
-    def stop(self):
-        if self.thread:
-            self.stop_event.set()
-            self.thread.join(timeout=1.0)
-
-
 def cleanup_scv(objective_id: str, project_root: str):
     """
     Cleans up the git worktree and pushes the branch to origin.
@@ -506,9 +440,6 @@ def run_adjutant_agent(initial_directive: str):
     overseer = SCVOverseer()
     overseer.start()
     
-    sync_overseer = SyncOverseer()
-    sync_overseer.start()
-    
     try:
         subprocess.run(cmd, env=env, check=False)
     except FileNotFoundError:
@@ -520,7 +451,6 @@ def run_adjutant_agent(initial_directive: str):
     finally:
         hud.stop()
         overseer.stop()
-        sync_overseer.stop()
         if os.path.exists(temp_prompt_path):
             os.remove(temp_prompt_path)
 
