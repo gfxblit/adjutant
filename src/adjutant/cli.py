@@ -42,8 +42,8 @@ def main():
             spawn_kwargs["directive"] = args.directive
         spawn_agent(args.agent, args.objective_id, **spawn_kwargs)
     elif args.command == "recover":
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        project_root = os.path.dirname(base_dir)
+        from adjutant.engine import get_project_root
+        project_root = get_project_root()
         print("Initiating SCV worktree recovery...")
         recover_orphaned_scvs(project_root)
         print("Recovery complete.")

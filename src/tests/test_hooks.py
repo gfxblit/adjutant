@@ -6,6 +6,14 @@ import sys
 from adjutant.hooks import get_mission_telemetry, main
 
 class TestHooks(unittest.TestCase):
+    def setUp(self):
+        # Ensure ADJUTANT_DISABLE_HOOK does not interfere with tests
+        self.env_patcher = patch.dict("os.environ", {"ADJUTANT_DISABLE_HOOK": "0"})
+        self.env_patcher.start()
+
+    def tearDown(self):
+        self.env_patcher.stop()
+
     @patch("subprocess.check_output")
     def test_get_mission_telemetry_success(self, mock_check_output):
         # Mocking 'bd list --all --json' call
