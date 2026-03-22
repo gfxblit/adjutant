@@ -595,6 +595,6 @@ def show_status():
             for obj_id, info in registry.items():
                 agent = info.get("agent_name", "???")
                 pid = info.get("pid", "???")
-                print(f"  ◐ {obj_id}: [SCV Running] [{agent} | PID: {pid}]")
+                print(f"  ? {obj_id}: [SCV Running] [{agent} | PID: {pid}]")
         else:
             print("  (None)")
