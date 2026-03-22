@@ -104,10 +104,43 @@ class TestRecovery(unittest.TestCase):
         mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
         
         # 3. Worktree remove call
-        mock_run.assert_any_call(["bd", "worktree", "remove", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
+        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
         
         # 4. Resolved prompt cleanup
         mock_remove.assert_called_with(resolved_path)
+
+    @patch("adjutant.engine.logger")
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    def test_cleanup_scv_with_errors(self, mock_remove, mock_exists, mock_run, mock_logger):
+        project_root = "/tmp/project"
+        objective_id = "test-obj"
+        worktree_path = os.path.join(project_root, ".adjutant", "worktrees", objective_id)
+        resolved_path = os.path.join(project_root, ".adjutant", "worktrees", f".resolved_system_{objective_id}.md")
+        
+        def exists_side_effect(path):
+            return True # Assume everything exists
+        mock_exists.side_effect = exists_side_effect
+        
+        # Mock subprocess.run to raise exception for some calls
+        def run_side_effect(cmd, **kwargs):
+            if "push" in cmd:
+                raise Exception("Push failed")
+            return MagicMock(returncode=0)
+            
+        mock_run.side_effect = run_side_effect
+        
+        # This should not raise an exception
+        cleanup_scv(objective_id, project_root)
+        
+        # Verify that other steps were still attempted
+        mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, check=False, capture_output=True)
+        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
+        mock_remove.assert_called_with(resolved_path)
+        
+        # Verify logger was called for the failure
+        mock_logger.info.assert_any_call("Failed to push branch scv/test-obj: Push failed")
 
 if __name__ == "__main__":
     unittest.main()

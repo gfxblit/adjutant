@@ -385,13 +385,13 @@ def cleanup_scv(objective_id: str, project_root: str):
     if os.path.exists(worktree_path):
         try:
             subprocess.run(
-                ["bd", "worktree", "remove", worktree_path],
+                ["bd", "worktree", "remove", "--force", worktree_path],
                 cwd=project_root,
                 check=False,
                 capture_output=True,
                 text=True
             )
-            logger.info(f"Removed worktree at {worktree_path} via 'bd worktree'")
+            logger.info(f"Removed worktree at {worktree_path} via 'bd worktree' (force=True)")
         except Exception as e:
             logger.info(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
