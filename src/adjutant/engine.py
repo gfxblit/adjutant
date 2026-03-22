@@ -513,6 +513,17 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         else:
             raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
 
+    # Ensure the SCV can use the 'bd' CLI by creating a .beads/redirect
+    try:
+        beads_redirect_dir = os.path.join(worktree_path, ".beads")
+        os.makedirs(beads_redirect_dir, exist_ok=True)
+        beads_redirect_path = os.path.join(beads_redirect_dir, "redirect")
+        with open(beads_redirect_path, "w") as f:
+            f.write(os.path.join(project_root, ".beads"))
+        logger.info(f"Created .beads/redirect pointing to main database.")
+    except Exception as e:
+        logger.warning(f"Failed to create .beads/redirect for {objective_id}: {e}")
+
     telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
     os.makedirs(telemetry_dir, exist_ok=True)
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
