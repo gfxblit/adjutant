@@ -35,8 +35,12 @@ def main():
     # status subcommand
     subparsers.add_parser("status", help="Show Adjutant mission and SCV status")
 
+    # abort subcommand
+    abort_parser = subparsers.add_parser("abort", help="Abort a running SCV")
+    abort_parser.add_argument("objective_id", help="Objective ID to abort")
+
     # Handle default 'plan' subcommand for backward compatibility
-    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "ui", "run-agent", "recover", "status", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["plan", "ui", "run-agent", "recover", "status", "abort", "-h", "--help"]:
         # If the first argument is not a known command or help, assume 'plan'
         sys.argv.insert(1, "plan")
     
@@ -51,6 +55,11 @@ def main():
         if args.directive:
             spawn_kwargs["directive"] = args.directive
         spawn_agent(args.agent, args.objective_id, **spawn_kwargs)
+    elif args.command == "abort":
+        from adjutant.engine import abort_scv
+        setup_logging(to_stdout=True, log_file=log_path)
+        print(f"Aborting SCV for {args.objective_id}...")
+        abort_scv(args.objective_id)
     elif args.command == "recover":
         setup_logging(to_stdout=False, log_file=log_path)
         print("Initiating SCV worktree recovery...")

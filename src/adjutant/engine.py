@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import signal
 import threading
 import json
 import logging
@@ -379,6 +380,58 @@ def cleanup_scv(objective_id: str, project_root: str):
         except Exception as e:
             logger.error(f"Failed to remove resolved system prompt: {e}")
 
+    # 5. Remove the worktree
+    if os.path.exists(worktree_path):
+        try:
+            # Use --force because we already attempted to commit/push above,
+            # and we want to ensure the worktree is actually removed.
+            subprocess.run(["bd", "worktree", "remove", objective_id, "--force"], cwd=project_root, check=True, capture_output=True)
+            logger.info(f"Removed worktree for {objective_id} via 'bd worktree remove --force'.")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to remove worktree for {objective_id}: {e.stderr.decode().strip()}")
+        except Exception as e:
+            logger.error(f"Unexpected error removing worktree for {objective_id}: {e}")
+
+
+def abort_scv(objective_id: str):
+    """
+    Terminates a running SCV process and performs cleanup.
+    """
+    project_root = get_project_root()
+    active_scvs = get_active_scvs(project_root)
+    
+    if objective_id not in active_scvs:
+        logger.warning(f"No active SCV found for objective {objective_id}. Attempting cleanup of orphaned worktree.")
+        # Still attempt cleanup in case the process died but worktree remains
+        cleanup_scv(objective_id, project_root)
+        return
+
+    scv_info = active_scvs[objective_id]
+    pid = scv_info.get("pid")
+    
+    if pid:
+        logger.info(f"Terminating SCV for {objective_id} (PID: {pid})...")
+        try:
+            # First try a clean SIGTERM to the process group.
+            # We use the PGID because SCVs are started with start_new_session=True.
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, signal.SIGTERM)
+            logger.info(f"Sent SIGTERM to process group {pgid} for {objective_id}.")
+        except ProcessLookupError:
+            logger.warning(f"Process {pid} or process group not found.")
+        except Exception as e:
+            logger.error(f"Failed to terminate process {pid}: {e}")
+
+    # Mark the objective as open in bd to allow restart
+    try:
+        subprocess.run(["bd", "update", objective_id, "--status", "open"], check=False)
+        logger.info(f"Reset objective {objective_id} status to 'open'.")
+    except Exception:
+        pass
+
+    # Run cleanup (which commits, pushes, and removes worktree)
+    cleanup_scv(objective_id, project_root)
+
 
 def recover_orphaned_scvs(project_root: str):
     """
@@ -520,7 +573,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         beads_redirect_path = os.path.join(beads_redirect_dir, "redirect")
         with open(beads_redirect_path, "w") as f:
             f.write(os.path.join(project_root, ".beads"))
-        logger.info(f"Created .beads/redirect pointing to main database.")
+        logger.info("Created .beads/redirect pointing to main database.")
     except Exception as e:
         logger.warning(f"Failed to create .beads/redirect for {objective_id}: {e}")
 

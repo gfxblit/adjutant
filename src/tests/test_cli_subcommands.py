@@ -41,3 +41,19 @@ def test_run_agent_subcommand():
                         to_stdout=False, 
                         log_file="/tmp/project/.adjutant/logs/adjutant.log"
                     )
+
+def test_abort_subcommand():
+    # Test 'abort' subcommand
+    test_args = ["adjutant", "abort", "adjutant-123"]
+    with patch.object(sys, "argv", test_args):
+        # Patch it in engine where it's defined
+        with patch("adjutant.engine.abort_scv") as mock_abort:
+            with patch("adjutant.cli.setup_logging") as mock_setup_logging:
+                with patch("adjutant.cli.get_project_root") as mock_get_root:
+                    mock_get_root.return_value = "/tmp/project"
+                    main()
+                    mock_abort.assert_called_once_with("adjutant-123")
+                    mock_setup_logging.assert_called_once_with(
+                        to_stdout=True, 
+                        log_file="/tmp/project/.adjutant/logs/adjutant.log"
+                    )
