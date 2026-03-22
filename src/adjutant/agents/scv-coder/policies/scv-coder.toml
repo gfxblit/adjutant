@@ -6,6 +6,20 @@ decision = "allow"
 priority = 100
 
 [[rule]]
+name = "Allow SCV-Coder to use GitHub CLI"
+toolName = "run_shell_command"
+commandPrefix = "gh"
+decision = "allow"
+priority = 100
+
+[[rule]]
+name = "Allow SCV-Coder to use Git"
+toolName = "run_shell_command"
+commandPrefix = "git"
+decision = "allow"
+priority = 101
+
+[[rule]]
 name = "Allow SCV-Coder to read telemetry and logs"
 toolName = "read_file"
 filePathPattern = ".beads/**"
