@@ -540,9 +540,8 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
 def show_status():
     """Displays the current status of the Adjutant mission and active SCVs."""
     project_root = get_project_root()
-    print("=== Adjutant Status ===")
     
-    # Get active mission summary
+    # 1. Mission Progress from 'bd status'
     try:
         output = subprocess.check_output(["bd", "status", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
         status_data = json.loads(output)
@@ -551,35 +550,51 @@ def show_status():
         open_issues = summary.get("open_issues", 0)
         closed = summary.get("closed_issues", 0)
         in_progress = summary.get("in_progress_issues", 0)
+        blocked = summary.get("blocked_issues", 0)
         
         progress = (closed / total * 100) if total > 0 else 0
-        print(f"\nMission Progress: {progress:.1f}% ({closed}/{total} issues closed)")
-        print(f"Open: {open_issues} | In Progress: {in_progress}")
-    except Exception:
+        print(f"📊 Adjutant Mission: {progress:.1f}% ({closed}/{total} closed)")
+        print(f"   Status: ○ {open_issues} open | ◐ {in_progress} in progress | ● {blocked} blocked | ✓ {closed} closed")
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
         print("Could not retrieve mission status summary from bd.")
 
-    # List active objectives
-    print("\n--- Active Objectives ---")
-    try:
-        output = subprocess.check_output(["bd", "list", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
-        objectives = json.loads(output)
-        in_progress_objs = [obj for obj in objectives if obj.get("status") == "in_progress"]
-        if not in_progress_objs:
-            print("No active objectives.")
-        else:
-            for obj in in_progress_objs:
-                print(f"[{obj['id']}] {obj['title']}")
-    except Exception:
-        print("Could not retrieve active objectives list from bd.")
-
-    # List running SCVs
-    print("\n--- Running SCVs ---")
+    # 2. Unified Active Objectives and SCVs
+    print("\nActive Objectives:")
     registry = get_active_scvs(project_root)
-    if not registry:
-        print("No active SCVs.")
-    else:
-        for obj_id, info in registry.items():
-            pid = info.get("pid", "Unknown")
-            agent = info.get("agent_name", "Unknown")
-            model = info.get("model", "Unknown")
-            print(f"[{obj_id}] Agent: {agent} | PID: {pid} | Status: Running | Model: {model}")
+    
+    try:
+        # Use 'bd list --status in_progress --json' to get active objectives
+        output = subprocess.check_output(["bd", "list", "--status", "in_progress", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
+        objectives = json.loads(output)
+        
+        ip_ids = {obj["id"] for obj in objectives}
+        titles = {obj["id"]: obj["title"] for obj in objectives}
+        
+        # Combine IDs from bd and running SCVs
+        all_ids = sorted(ip_ids | registry.keys())
+        
+        if not all_ids:
+            print("  (None)")
+        else:
+            for obj_id in all_ids:
+                title = titles.get(obj_id, "Unknown Objective")
+                
+                scv_info_str = ""
+                if obj_id in registry:
+                    info = registry[obj_id]
+                    agent = info.get("agent_name", "???")
+                    pid = info.get("pid", "???")
+                    scv_info_str = f" [{agent} | PID: {pid} | Running]"
+                
+                status_icon = "◐" if obj_id in ip_ids else "⚠️"
+                print(f"  {status_icon} {obj_id}: {title}{scv_info_str}")
+                
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        # Fallback if bd list fails but we have SCV info
+        if registry:
+            for obj_id, info in registry.items():
+                agent = info.get("agent_name", "???")
+                pid = info.get("pid", "???")
+                print(f"  ? {obj_id}: [SCV Running] [{agent} | PID: {pid}]")
+        else:
+            print("  (None)")
