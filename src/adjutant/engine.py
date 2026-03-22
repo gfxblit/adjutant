@@ -4,10 +4,37 @@ import sys
 import threading
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 # Setup logger
 logger = logging.getLogger("adjutant")
+
+def format_duration(iso_date: str) -> str:
+    """Formats the duration from iso_date until now as a short string (e.g., 2h15m)."""
+    try:
+        # datetime.fromisoformat in older versions of Python doesn't handle 'Z' well.
+        # Python 3.11+ does, but for safety we replace Z with +00:00.
+        dt = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        duration = now - dt
+        seconds = int(duration.total_seconds())
+        if seconds < 0:
+            return "0s"
+        
+        days, rem = divmod(seconds, 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, seconds = divmod(rem, 60)
+        
+        if days > 0:
+            return f"{days}d{hours}h"
+        if hours > 0:
+            return f"{hours}h{minutes}m"
+        if minutes > 0:
+            return f"{minutes}m"
+        return f"{seconds}s"
+    except (ValueError, TypeError):
+        return "???"
 
 def setup_logging(to_stdout: bool = False, log_file: Optional[str] = None):
     """
@@ -530,7 +557,8 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             json.dump({
                 "pid": process.pid,
                 "agent_name": agent_name,
-                "model": model
+                "model": model,
+                "start_time": datetime.now(timezone.utc).isoformat()
             }, f, indent=2)
     except IOError as e:
         logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
@@ -569,6 +597,7 @@ def show_status():
         
         ip_ids = {obj["id"] for obj in objectives}
         titles = {obj["id"]: obj["title"] for obj in objectives}
+        updated_ats = {obj["id"]: obj.get("updated_at") for obj in objectives}
         
         # Combine IDs from bd and running SCVs
         all_ids = sorted(ip_ids | registry.keys())
@@ -580,14 +609,33 @@ def show_status():
                 title = titles.get(obj_id, "Unknown Objective")
                 
                 scv_info_str = ""
+                time_info = ""
                 if obj_id in registry:
                     info = registry[obj_id]
                     agent = info.get("agent_name", "???")
                     pid = info.get("pid", "???")
-                    scv_info_str = f" [{agent} | PID: {pid} | Running]"
+                    start_time = info.get("start_time")
+                    
+                    if start_time:
+                        duration = format_duration(start_time)
+                        scv_info_str = f" [{agent} | PID: {pid} | Running: {duration}]"
+                    else:
+                        # Fallback to bd updated_at if start_time not in info
+                        updated_at = updated_ats.get(obj_id)
+                        if updated_at:
+                            duration = format_duration(updated_at)
+                            scv_info_str = f" [{agent} | PID: {pid} | Running: {duration}]"
+                        else:
+                            scv_info_str = f" [{agent} | PID: {pid} | Running]"
+                else:
+                    # In-progress in bd but no running SCV found
+                    updated_at = updated_ats.get(obj_id)
+                    if updated_at:
+                        duration = format_duration(updated_at)
+                        time_info = f" (In progress: {duration})"
                 
                 status_icon = "◐" if obj_id in ip_ids else "⚠️"
-                print(f"  {status_icon} {obj_id}: {title}{scv_info_str}")
+                print(f"  {status_icon} {obj_id}: {title}{time_info}{scv_info_str}")
                 
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         # Fallback if bd list fails but we have SCV info
