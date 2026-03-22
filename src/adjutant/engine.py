@@ -86,8 +86,8 @@ def get_active_scvs(project_root: str) -> dict:
                     pid = scv_info.get("pid")
                     if pid and is_process_running(pid):
                         active_scvs[entry] = scv_info
-                except (json.JSONDecodeError, IOError):
-                    pass
+                except (json.JSONDecodeError, IOError) as e:
+                    logger.warning(f"Could not read or parse SCV info from {scv_info_path}: {e}")
     return active_scvs
 
 
