@@ -1,5 +1,5 @@
 {
-  "pid": 53757,
+  "pid": 54349,
   "agent_name": "scv-coder",
-  "model": "gemini-3-flash-preview"
+  "model": "gemini-2.5-flash-lite"
 }
