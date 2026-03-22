@@ -20,6 +20,13 @@ decision = "allow"
 priority = 100
 
 [[rule]]
+name = "Allow Adjutant to use git CLI"
+toolName = "run_shell_command"
+commandPrefix = "git"
+decision = "allow"
+priority = 100
+
+[[rule]]
 name = "Allow Adjutant mission setup scripts"
 description = "Allows variable assignment and compound commands involving bd and echo"
 toolName = "run_shell_command"
