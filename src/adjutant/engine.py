@@ -39,7 +39,6 @@ def setup_logging(to_stdout: bool = False, log_file: Optional[str] = None):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-_registry_lock = threading.Lock()
 
 def is_process_running(pid: int) -> bool:
     """Checks if a process with a given PID is still running."""
@@ -53,16 +52,52 @@ def is_process_running(pid: int) -> bool:
         return True
 
 
+def get_project_root() -> str:
+    """Gets the main project root, resolving from within worktrees if necessary."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = os.path.dirname(base_dir)
+    # Check if we are in an SCV worktree
+    if ".adjutant" in root and "worktrees" in root:
+        # Move up from .adjutant/worktrees/objective_id
+        root = os.path.dirname(os.path.dirname(os.path.dirname(root)))
+    return root
+
+
+def get_active_scvs(project_root: str) -> dict:
+    """
+    Scans worktrees for .scv_info.json files and returns a dictionary of active SCVs.
+    Active means the process with the PID in .scv_info.json is still running.
+    """
+    worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
+    active_scvs = {}
+
+    if not os.path.exists(worktrees_dir):
+        return active_scvs
+
+    for entry in os.listdir(worktrees_dir):
+        worktree_path = os.path.join(worktrees_dir, entry)
+        if os.path.isdir(worktree_path) and not entry.startswith('.'):
+            scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+            if os.path.exists(scv_info_path):
+                try:
+                    with open(scv_info_path, "r") as f:
+                        scv_info = json.load(f)
+
+                    pid = scv_info.get("pid")
+                    if pid and is_process_running(pid):
+                        active_scvs[entry] = scv_info
+                except (json.JSONDecodeError, IOError) as e:
+                    logger.warning(f"Could not read or parse SCV info from {scv_info_path}: {e}")
+    return active_scvs
+
+
 class AdjutantHUD:
     def __init__(self, mission: str, interval: int = 5):
         self.mission = mission
         self.interval = interval
         self.stop_event = threading.Event()
         self.thread = None
-        # Find project root
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.project_root = os.path.dirname(base_dir)
-        self.registry_path = os.path.join(self.project_root, ".adjutant", "logs", "active_scvs.json")
+        self.project_root = get_project_root()
 
     def update_hud(self):
         try:
@@ -90,18 +125,10 @@ class AdjutantHUD:
                 # If bd fails, we just use defaults for mission status
                 pass
             
-            # 2. Get SCV status from telemetry registry
-            scv_count = 0
-            scv_list = []
-            if os.path.exists(self.registry_path):
-                with _registry_lock:
-                    try:
-                        with open(self.registry_path, "r") as f:
-                            registry = json.load(f)
-                            scv_count = len(registry)
-                            scv_list = sorted(list(registry.keys()))
-                    except (json.JSONDecodeError, IOError):
-                        pass
+            # 2. Get SCV status by scanning worktrees
+            registry = get_active_scvs(self.project_root)
+            scv_count = len(registry)
+            scv_list = sorted(list(registry.keys()))
 
             # Format title string
             # Title: Mission: {MISSION} | {PROGRESS}% | {CLOSED}/{TOTAL} | Open: {OPEN}, IP: {IN_PROGRESS}
@@ -147,42 +174,64 @@ class SCVOverseer:
         self.interval = interval
         self.stop_event = threading.Event()
         self.thread = None
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.project_root = os.path.dirname(self.base_dir)
+        self.project_root = get_project_root()
         self.telemetry_dir = os.path.join(self.project_root, ".adjutant", "logs")
-        self.registry_path = os.path.join(self.telemetry_dir, "active_scvs.json")
+
+    def _get_registry_from_worktrees(self):
+        """Scans .adjutant/worktrees for .scv_info.json files to build the registry."""
+        worktrees_dir = os.path.join(self.project_root, ".adjutant", "worktrees")
+        registry = {}
+        if not os.path.exists(worktrees_dir):
+            return registry
+            
+        try:
+            for entry in os.listdir(worktrees_dir):
+                if entry.startswith('.'):
+                    continue
+                worktree_path = os.path.join(worktrees_dir, entry)
+                if os.path.isdir(worktree_path):
+                    scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+                    if os.path.exists(scv_info_path):
+                        try:
+                            with open(scv_info_path, "r") as f:
+                                scv_info = json.load(f)
+                                registry[entry] = scv_info
+                        except (json.JSONDecodeError, IOError):
+                            pass
+        except OSError:
+            pass
+        return registry
 
     def _check_scvs(self):
-        if not os.path.exists(self.registry_path):
-            return
+        '''
+        Scans worktrees for SCVs, checks their running status, and cleans up if necessary.
+        '''
+        registry_from_worktrees = self._get_registry_from_worktrees()
+        
+        if not registry_from_worktrees:
+            return # Nothing more to do if no SCVs found
 
-        with _registry_lock:
-            try:
-                with open(self.registry_path, "r") as f:
-                    registry = json.load(f)
-            except (json.JSONDecodeError, IOError):
-                return
-
-        updated_registry = False
-        active_registry = {}
-
-        for objective_id, scv_info in registry.items():
+        # Iterate through SCVs found in worktrees
+        for objective_id, scv_info in registry_from_worktrees.items():
             pid = scv_info.get("pid")
             agent_name = scv_info.get("agent_name")
+            current_model = scv_info.get("model", self.MODELS[0]) # Get model for potential restart
             
+            # Check if the process is running. If not, clean it up.
             if pid and not is_process_running(pid):
                 log_path = os.path.join(self.telemetry_dir, f"{objective_id}.log")
-                should_cleanup = True
-
+                logger.warning(f"[Overseer] SCV for {objective_id} (PID: {pid}, Model: {current_model}) not running. Checking for restart conditions.")
+                
+                should_restart = False
+                # Check for specific crash conditions like capacity or quota errors
                 if os.path.exists(log_path):
                     try:
                         with open(log_path, "r") as f:
                             log_content = f.read()
                         
-                        current_model = scv_info.get("model", self.MODELS[0])
-                        # Detect capacity or quota errors
                         if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED", "TerminalQuotaError"]):
-                            logger.info(f"\n[Overseer] Detected capacity crash for SCV {objective_id} ({current_model}). Restarting with fallback model.")
+                            logger.info(f"[Overseer] Detected crash for {objective_id} ({current_model}). Attempting restart with fallback model.")
+                            should_restart = True
                             
                             next_model = None
                             try:
@@ -193,41 +242,18 @@ class SCVOverseer:
                                 next_model = self.MODELS[1] # fallback to flash
                             
                             if next_model:
+                                logger.info(f"[Overseer] Restarting {objective_id} with model: {next_model}")
                                 spawn_agent(agent_name, objective_id, starting_model=next_model)
-                                # spawn_agent updates the registry file directly
-                                # so we just skip adding it to active_registry here
-                                continue
+                                continue 
                             else:
-                                logger.info(f"[Overseer] All fallback models exhausted for {objective_id}.")
+                                logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting.")
                     except IOError:
-                        pass
+                        logger.warning(f"[Overseer] Could not read log file {log_path} for {objective_id}.")
                 
-                if should_cleanup:
+                # If not restarting, proceed with cleanup.
+                if not should_restart:
+                    logger.info(f"[Overseer] Cleaning up SCV for {objective_id} as it is not running and not eligible for restart.")
                     cleanup_scv(objective_id, self.project_root)
-                    updated_registry = True
-            else:
-                active_registry[objective_id] = scv_info
-                
-        if updated_registry:
-            with _registry_lock:
-                try:
-                    # Reload registry to ensure we don't overwrite new spawns
-                    if os.path.exists(self.registry_path):
-                        with open(self.registry_path, "r") as f:
-                            latest_registry = json.load(f)
-                        # Only keep the ones we still consider active
-                        # and combine with any new spawns that happened in between
-                        for obj_id in list(latest_registry.keys()):
-                            # If it was in our original registry but not in active_registry, it's done
-                            if obj_id in registry and obj_id not in active_registry:
-                                del latest_registry[obj_id]
-                    else:
-                        latest_registry = active_registry
-
-                    with open(self.registry_path, "w") as f:
-                        json.dump(latest_registry, f, indent=2)
-                except IOError:
-                    pass
 
     def _run(self):
         while not self.stop_event.is_set():
@@ -251,9 +277,7 @@ class SyncOverseer:
         self.interval = interval
         self.stop_event = threading.Event()
         self.thread = None
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.project_root = os.path.dirname(base_dir)
-        self.registry_path = os.path.join(self.project_root, ".adjutant", "logs", "active_scvs.json")
+        self.project_root = get_project_root()
 
     def _check_sync(self):
         try:
@@ -265,14 +289,8 @@ class SyncOverseer:
             objectives = json.loads(output)
             
             # 3. Get active SCVs to avoid spawning multiple agents for same objective
-            active_objectives = []
-            if os.path.exists(self.registry_path):
-                with _registry_lock:
-                    try:
-                        with open(self.registry_path, "r") as f:
-                            active_objectives = list(json.load(f).keys())
-                    except:
-                        pass
+            active_scvs = get_active_scvs(self.project_root)
+            active_objectives = list(active_scvs.keys())
 
             for obj in objectives:
                 obj_id = obj["id"]
@@ -388,38 +406,20 @@ def cleanup_scv(objective_id: str, project_root: str):
 
 def recover_orphaned_scvs(project_root: str):
     """
-    Iterates through all SCV worktrees. If the objective is no longer active
-    in the telemetry registry OR the process is no longer running,
+    Iterates through all SCV worktrees. If the process is no longer running,
     runs cleanup_scv on it.
     """
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     if not os.path.exists(worktrees_dir):
         return
 
-    telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
-    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
-    
-    registry = {}
-    if os.path.exists(registry_path):
-        try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-
+    active_scvs = get_active_scvs(project_root)
     found_orphans = []
     
     for entry in os.listdir(worktrees_dir):
         worktree_path = os.path.join(worktrees_dir, entry)
         if os.path.isdir(worktree_path) and not entry.startswith('.'):
-            # Check if this worktree is active
-            is_active = False
-            if entry in registry:
-                pid = registry[entry].get("pid")
-                if pid and is_process_running(pid):
-                    is_active = True
-            
-            if not is_active:
+            if entry not in active_scvs:
                 found_orphans.append(entry)
 
     if not found_orphans:
@@ -428,43 +428,16 @@ def recover_orphaned_scvs(project_root: str):
 
     logger.info(f"Found {len(found_orphans)} orphaned worktree(s). Cleaning up...")
     
-    updated_registry = False
     for entry in found_orphans:
         cleanup_scv(entry, project_root)
-        updated_registry = True
-
-    if updated_registry:
-        with _registry_lock:
-            try:
-                # Reload registry to ensure we don't overwrite new spawns
-                if os.path.exists(registry_path):
-                    with open(registry_path, "r") as f:
-                        latest_registry = json.load(f)
-                    for obj_id in found_orphans:
-                        if obj_id in latest_registry:
-                            del latest_registry[obj_id]
-                else:
-                    # If registry file was deleted, we only keep what's still active
-                    # but we don't have that info easily here, so we just use the original registry
-                    # minus the orphans we found.
-                    for obj_id in found_orphans:
-                        if obj_id in registry:
-                            del registry[obj_id]
-                    latest_registry = registry
-
-                with open(registry_path, "w") as f:
-                    json.dump(latest_registry, f, indent=2)
-                logger.info("Updated active_scvs.json.")
-            except IOError:
-                pass
 
 
 def run_adjutant_agent(initial_directive: str):
     """
     Launches the Adjutant (Planner) agent as an interactive Gemini session.
     """
+    project_root = get_project_root()
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    project_root = os.path.dirname(base_dir)
 
     # Setup logging to file by default for the interactive session
     log_path = os.path.join(project_root, ".adjutant", "logs", "adjutant.log")
@@ -537,7 +510,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         prompt_template = f.read()
     
     prompt = prompt_template.format(objective_id=objective_id)
-    project_root = os.path.dirname(base_dir)
+    project_root = get_project_root()
 
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     os.makedirs(worktrees_dir, exist_ok=True)
@@ -606,49 +579,19 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     )
     log_file.close()
 
-    registry_path = os.path.join(telemetry_dir, "active_scvs.json")
-    with _registry_lock:
-        try:
-            if os.path.exists(registry_path):
-                with open(registry_path, "r") as f:
-                    registry = json.load(f)
-            else:
-                registry = {}
-        except (json.JSONDecodeError, IOError):
-            registry = {}
-        
-        registry[objective_id] = {
-            "pid": process.pid,
-            "agent_name": agent_name,
-            "model": model
-        }
-        
-        with open(registry_path, "w") as f:
-            json.dump(registry, f, indent=2)
-
-        # Write worktree-local SCV info
-        scv_info_path = os.path.join(worktree_path, ".scv_info.json")
-        try:
-            with open(scv_info_path, "w") as f:
-                json.dump({
-                    "pid": process.pid,
-                    "agent_name": agent_name,
-                    "model": model
-                }, f, indent=2)
-        except IOError as e:
-            logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
+    # Write worktree-local SCV info
+    scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+    try:
+        with open(scv_info_path, "w") as f:
+            json.dump({
+                "pid": process.pid,
+                "agent_name": agent_name,
+                "model": model
+            }, f, indent=2)
+    except IOError as e:
+        logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
 
     logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
-
-def get_project_root() -> str:
-    """Gets the main project root, resolving from within worktrees if necessary."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    root = os.path.dirname(base_dir)
-    # Check if we are in an SCV worktree
-    if ".adjutant" in root and "worktrees" in root:
-        # Move up from .adjutant/worktrees/objective_id
-        root = os.path.dirname(os.path.dirname(os.path.dirname(root)))
-    return root
 
 def show_status():
     """Displays the current status of the Adjutant mission and active SCVs."""
@@ -687,31 +630,12 @@ def show_status():
 
     # List running SCVs
     print("\n--- Running SCVs ---")
-    registry_path = os.path.join(project_root, ".adjutant", "logs", "active_scvs.json")
-    if os.path.exists(registry_path):
-        try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-            
-            if not registry:
-                print("No active SCVs.")
-            else:
-                for obj_id, info in registry.items():
-                    pid = info.get("pid", "Unknown")
-                    agent = info.get("agent_name", "Unknown")
-                    model = info.get("model", "Unknown")
-                    
-                    # Check if actually running
-                    running = "Running"
-                    try:
-                        os.kill(int(pid), 0)
-                    except (ProcessLookupError, ValueError, TypeError):
-                        running = "Stopped"
-                    except PermissionError:
-                        running = "Active (No Permission)"
-                        
-                    print(f"[{obj_id}] Agent: {agent} | PID: {pid} | Status: {running} | Model: {model}")
-        except Exception as e:
-            print(f"Error reading SCV registry: {e}")
-    else:
+    registry = get_active_scvs(project_root)
+    if not registry:
         print("No active SCVs.")
+    else:
+        for obj_id, info in registry.items():
+            pid = info.get("pid", "Unknown")
+            agent = info.get("agent_name", "Unknown")
+            model = info.get("model", "Unknown")
+            print(f"[{obj_id}] Agent: {agent} | PID: {pid} | Status: Running | Model: {model}")

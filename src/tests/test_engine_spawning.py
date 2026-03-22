@@ -1,17 +1,20 @@
 from unittest.mock import patch, mock_open, MagicMock
-from adjutant.engine import spawn_agent
+from adjutant.engine import spawn_agent, get_project_root
 import pytest
 import os
 import json
 
+@patch("adjutant.engine.get_project_root")
 @patch("subprocess.run")
 @patch("subprocess.Popen")
 @patch("os.makedirs")
 @patch("os.path.exists")
-def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run):
+def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run, mock_get_root):
     # Setup
     agent_name = "scv-coder"
     objective_id = "test-obj-123"
+    project_root = "/mock/project"
+    mock_get_root.return_value = project_root
     mock_exists.return_value = True
     mock_popen.return_value.pid = 12345
     
@@ -36,9 +39,10 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run)
     )
     
     # Verify bd worktree create call
+    worktree_path = os.path.join(project_root, ".adjutant", "worktrees", objective_id)
     mock_run.assert_any_call(
-        ["bd", "worktree", "create", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".adjutant", "worktrees", objective_id), "--branch", f"scv/{objective_id}"],
-        cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        ["bd", "worktree", "create", worktree_path, "--branch", f"scv/{objective_id}"],
+        cwd=project_root,
         check=True,
         capture_output=True,
         text=True
@@ -65,7 +69,7 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run)
     mock_file.close.assert_called()
 
     # Verify .scv_info.json was written
-    expected_scv_info_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".adjutant", "worktrees", objective_id, ".scv_info.json")
+    expected_scv_info_path = os.path.join(worktree_path, ".scv_info.json")
     
     # Check if any call to open was for .scv_info.json
     found_scv_info_open = False
@@ -77,12 +81,6 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run)
     assert found_scv_info_open, f"Did not find open call for {expected_scv_info_path}"
 
     # Verify content of .scv_info.json
-    # Find the write call that corresponds to .scv_info.json
-    # Since we are using the same mock_open for everything, this is tricky.
-    # But we can check all calls to write.
-    # Actually, we can check the calls to json.dump if we mock it, but here we don't.
-    # We can check the write calls on the file handle.
-    
     handle = m()
     # Collect all writes
     all_writes = [call[0][0] for call in handle.write.call_args_list]
@@ -92,14 +90,17 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run)
     assert f'"agent_name": "{agent_name}"' in full_content
     assert '"model": "gemini-3.1-pro-preview"' in full_content
 
+@patch("adjutant.engine.get_project_root")
 @patch("subprocess.run")
 @patch("subprocess.Popen")
 @patch("os.makedirs")
 @patch("os.path.exists")
-def test_spawn_agent_scv_tester(mock_exists, mock_makedirs, mock_popen, mock_run):
+def test_spawn_agent_scv_tester(mock_exists, mock_makedirs, mock_popen, mock_run, mock_get_root):
     # Setup
     agent_name = "scv-tester"
     objective_id = "test-obj-456"
+    project_root = "/mock/project"
+    mock_get_root.return_value = project_root
     mock_exists.return_value = True
     mock_popen.return_value.pid = 67890
     
