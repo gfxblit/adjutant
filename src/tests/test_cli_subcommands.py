@@ -32,5 +32,12 @@ def test_run_agent_subcommand():
     with patch.object(sys, "argv", test_args):
         # We need to mock it where it's imported in cli.py or from engine
         with patch("adjutant.cli.spawn_agent") as mock_spawn:
-            main()
-            mock_spawn.assert_called_once_with("scv-coder", "adjutant-123")
+            with patch("adjutant.cli.setup_logging") as mock_setup_logging:
+                with patch("adjutant.cli.get_project_root") as mock_get_root:
+                    mock_get_root.return_value = "/tmp/project"
+                    main()
+                    mock_spawn.assert_called_once_with("scv-coder", "adjutant-123")
+                    mock_setup_logging.assert_called_once_with(
+                        to_stdout=False, 
+                        log_file="/tmp/project/.adjutant/logs/adjutant.log"
+                    )
