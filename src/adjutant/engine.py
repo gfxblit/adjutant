@@ -4,10 +4,37 @@ import sys
 import threading
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 # Setup logger
 logger = logging.getLogger("adjutant")
+
+def format_duration(iso_date: str) -> str:
+    """Formats the duration from iso_date until now as a short string (e.g., 2h15m)."""
+    try:
+        # datetime.fromisoformat in older versions of Python doesn't handle 'Z' well.
+        # Python 3.11+ does, but for safety we replace Z with +00:00.
+        dt = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        duration = now - dt
+        seconds = int(duration.total_seconds())
+        if seconds < 0:
+            return "0s"
+        
+        days, rem = divmod(seconds, 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, seconds = divmod(rem, 60)
+        
+        if days > 0:
+            return f"{days}d{hours}h"
+        if hours > 0:
+            return f"{hours}h{minutes}m"
+        if minutes > 0:
+            return f"{minutes}m"
+        return f"{seconds}s"
+    except (ValueError, TypeError):
+        return "???"
 
 def setup_logging(to_stdout: bool = False, log_file: Optional[str] = None):
     """
@@ -350,6 +377,35 @@ def cleanup_scv(objective_id: str, project_root: str):
         except Exception as e:
             logger.error(f"Failed to remove resolved system prompt: {e}")
 
+    # 5. Remove the git worktree
+    try:
+        # Use 'bd worktree remove' to ensure any beads-specific cleanup also happens.
+        # Use --force to remove it even if it has untracked files or other issues.
+        res = subprocess.run(
+            ["bd", "worktree", "remove", objective_id, "--force"],
+            cwd=project_root,
+            check=False,
+            capture_output=True,
+            text=True
+        )
+        if res.returncode == 0:
+            logger.info(f"Removed git worktree for {objective_id} via 'bd worktree remove'.")
+        else:
+            # Fallback to git worktree remove if bd fails for some reason
+            res_git = subprocess.run(
+                ["git", "worktree", "remove", "--force", worktree_path],
+                cwd=project_root,
+                check=False,
+                capture_output=True,
+                text=True
+            )
+            if res_git.returncode == 0:
+                logger.info(f"Removed git worktree for {objective_id} via 'git worktree remove' (bd failed).")
+            else:
+                logger.error(f"Failed to remove git worktree for {objective_id} (exit code {res_git.returncode}): {res_git.stderr.strip()}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during worktree removal: {e}")
+
 
 def recover_orphaned_scvs(project_root: str):
     """
@@ -484,6 +540,19 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         else:
             raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
 
+    # Explicitly ensure .beads/redirect exists for shared beads database access.
+    # Relative path from .adjutant/worktrees/objective_id/.beads/redirect to project-root/.beads is ../../../.beads
+    beads_dir = os.path.join(worktree_path, ".beads")
+    os.makedirs(beads_dir, exist_ok=True)
+    redirect_path = os.path.join(beads_dir, "redirect")
+    if not os.path.exists(redirect_path):
+        try:
+            with open(redirect_path, "w") as f:
+                f.write("../../../.beads\n")
+            logger.info(f"Initialized .beads/redirect in worktree {objective_id}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize .beads/redirect: {e}")
+
     telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
     os.makedirs(telemetry_dir, exist_ok=True)
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
@@ -530,7 +599,8 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             json.dump({
                 "pid": process.pid,
                 "agent_name": agent_name,
-                "model": model
+                "model": model,
+                "start_time": datetime.now(timezone.utc).isoformat()
             }, f, indent=2)
     except IOError as e:
         logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
@@ -569,6 +639,7 @@ def show_status():
         
         ip_ids = {obj["id"] for obj in objectives}
         titles = {obj["id"]: obj["title"] for obj in objectives}
+        updated_ats = {obj["id"]: obj.get("updated_at") for obj in objectives}
         
         # Combine IDs from bd and running SCVs
         all_ids = sorted(ip_ids | registry.keys())
@@ -580,14 +651,33 @@ def show_status():
                 title = titles.get(obj_id, "Unknown Objective")
                 
                 scv_info_str = ""
+                time_info = ""
                 if obj_id in registry:
                     info = registry[obj_id]
                     agent = info.get("agent_name", "???")
                     pid = info.get("pid", "???")
-                    scv_info_str = f" [{agent} | PID: {pid} | Running]"
+                    start_time = info.get("start_time")
+                    
+                    if start_time:
+                        duration = format_duration(start_time)
+                        scv_info_str = f" [{agent} | PID: {pid} | Running: {duration}]"
+                    else:
+                        # Fallback to bd updated_at if start_time not in info
+                        updated_at = updated_ats.get(obj_id)
+                        if updated_at:
+                            duration = format_duration(updated_at)
+                            scv_info_str = f" [{agent} | PID: {pid} | Running: {duration}]"
+                        else:
+                            scv_info_str = f" [{agent} | PID: {pid} | Running]"
+                else:
+                    # In-progress in bd but no running SCV found
+                    updated_at = updated_ats.get(obj_id)
+                    if updated_at:
+                        duration = format_duration(updated_at)
+                        time_info = f" (In progress: {duration})"
                 
                 status_icon = "◐" if obj_id in ip_ids else "⚠️"
-                print(f"  {status_icon} {obj_id}: {title}{scv_info_str}")
+                print(f"  {status_icon} {obj_id}: {title}{time_info}{scv_info_str}")
                 
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         # Fallback if bd list fails but we have SCV info

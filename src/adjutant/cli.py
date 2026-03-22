@@ -1,7 +1,15 @@
 import argparse
 import sys
 import os
-from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs, show_status, setup_logging
+from adjutant.engine import (
+    run_adjutant_agent, 
+    spawn_agent, 
+    recover_orphaned_scvs, 
+    show_status, 
+    setup_logging, 
+    get_project_root,
+    logger
+)
 from adjutant.ui import run_ui
 
 def main():
@@ -42,11 +50,10 @@ def main():
             spawn_kwargs["directive"] = args.directive
         spawn_agent(args.agent, args.objective_id, **spawn_kwargs)
     elif args.command == "recover":
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        project_root = os.path.dirname(base_dir)
-        print("Initiating SCV worktree recovery...")
+        project_root = get_project_root()
+        logger.info("Initiating SCV worktree recovery...")
         recover_orphaned_scvs(project_root)
-        print("Recovery complete.")
+        logger.info("Recovery complete.")
     elif args.command == "status":
         show_status()
     elif args.command == "ui":

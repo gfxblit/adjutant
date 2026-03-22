@@ -110,6 +110,9 @@ class TestRecovery(unittest.TestCase):
         # 4. Resolved prompt cleanup
         mock_remove.assert_called_with(resolved_path)
 
+        # 5. Removal of worktree
+        mock_run.assert_any_call(["bd", "worktree", "remove", objective_id, "--force"], cwd=project_root, check=False, capture_output=True, text=True)
+
     @patch("adjutant.engine.logger")
     @patch("subprocess.run")
     @patch("os.path.exists")
