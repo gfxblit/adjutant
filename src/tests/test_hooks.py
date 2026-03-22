@@ -60,5 +60,18 @@ class TestHooks(unittest.TestCase):
         }
         self.assertEqual(output_data, expected_output)
 
+    @patch("os.environ.get")
+    @patch("sys.stdout", new_callable=io.StringIO)
+    def test_cli_hook_protocol_disabled(self, mock_stdout, mock_environ_get):
+        # Mocking environment variable disable hook
+        mock_environ_get.side_effect = lambda k: "1" if k == "ADJUTANT_DISABLE_HOOK" else None
+        
+        # Call the CLI entry point
+        main()
+        
+        # Verify output JSON is empty
+        output_data = json.loads(mock_stdout.getvalue())
+        self.assertEqual(output_data, {"hookSpecificOutput": {}})
+
 if __name__ == "__main__":
     unittest.main()

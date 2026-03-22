@@ -461,6 +461,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     branch_name = f"scv/{objective_id}"
 
     env = os.environ.copy()
+    env["ADJUTANT_DISABLE_HOOK"] = "1"
     resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
     with open(resolved_system_prompt_path, "w") as f:
         f.write(prompt)
