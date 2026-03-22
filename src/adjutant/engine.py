@@ -308,8 +308,7 @@ class SyncOverseer:
                 if res.returncode == 0:
                     count = int(res.stdout.strip())
                     if count > 0:
-                        logger.info(f"
-[SyncOverseer] Objective {obj_id} is behind origin/main by {count} commits. Triggering sync.")
+                        logger.info(f"\n[SyncOverseer] Objective {obj_id} is behind origin/main by {count} commits. Triggering sync.")
                         directive = (
                             f"Sync branch '{branch_name}' with 'origin/main' using 'git pull --rebase origin main'. "
                             "MANDATORY: Resolve any conflicts and force-push the results. "
@@ -349,8 +348,7 @@ def cleanup_scv(objective_id: str, project_root: str):
     branch_name = f"scv/{objective_id}"
     resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
 
-    logger.info(f"
-[Cleaning up SCV for {objective_id}]")
+    logger.info(f"\n[Cleaning up SCV for {objective_id}]")
 
     # 1. Check if worktree exists before proceeding
     if not os.path.exists(worktree_path):
@@ -481,8 +479,7 @@ def run_adjutant_agent(initial_directive: str):
     log_path = os.path.join(project_root, ".adjutant", "logs", "adjutant.log")
     setup_logging(to_stdout=False, log_file=log_path)
 
-    logger.info("
-[Adjutant Online: Initiating Mission Planning]")
+    logger.info("\n[Adjutant Online: Initiating Mission Planning]")
     
     # Recover any orphaned SCVs from previous session
     recover_orphaned_scvs(project_root)
@@ -648,15 +645,13 @@ def show_status():
         in_progress = summary.get("in_progress_issues", 0)
         
         progress = (closed / total * 100) if total > 0 else 0
-        print(f"
-Mission Progress: {progress:.1f}% ({closed}/{total} issues closed)")
+        print(f"\nMission Progress: {progress:.1f}% ({closed}/{total} issues closed)")
         print(f"Open: {open_issues} | In Progress: {in_progress}")
     except Exception:
         print("Could not retrieve mission status summary from bd.")
 
     # List active objectives
-    print("
---- Active Objectives ---")
+    print("\n--- Active Objectives ---")
     try:
         output = subprocess.check_output(["bd", "list", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
         objectives = json.loads(output)
@@ -670,8 +665,7 @@ Mission Progress: {progress:.1f}% ({closed}/{total} issues closed)")
         print("Could not retrieve active objectives list from bd.")
 
     # List running SCVs
-    print("
---- Running SCVs ---")
+    print("\n--- Running SCVs ---")
     registry = get_active_scvs(project_root)
     if not registry:
         print("No active SCVs.")
