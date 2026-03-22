@@ -589,7 +589,7 @@ def show_status():
                 status_icon = "◐" if obj_id in ip_ids else "⚠️"
                 print(f"  {status_icon} {obj_id}: {title}{scv_info_str}")
                 
-    except Exception:
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
         # Fallback if bd list fails but we have SCV info
         if registry:
             for obj_id, info in registry.items():
