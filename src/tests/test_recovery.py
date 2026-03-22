@@ -82,12 +82,18 @@ class TestRecovery(unittest.TestCase):
     @patch("subprocess.run")
     @patch("os.path.exists")
     @patch("os.remove")
-    def test_cleanup_scv(self, mock_remove, mock_exists, mock_run):
+    @patch("adjutant.engine.logger")
+    def test_cleanup_scv(self, mock_logger, mock_remove, mock_exists, mock_run):
         project_root = "/tmp/project"
         objective_id = "test-obj"
         worktree_path = os.path.join(project_root, ".adjutant", "worktrees", objective_id)
         resolved_path = os.path.join(project_root, ".adjutant", "worktrees", f".resolved_system_{objective_id}.md")
         
+        # Setup mock for subprocess.run to return successful objects
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_run.return_value = mock_res
+
         def exists_side_effect(path):
             if path == worktree_path: return True
             if path == resolved_path: return True
@@ -98,16 +104,39 @@ class TestRecovery(unittest.TestCase):
         
         # 1. Auto-commit calls
         mock_run.assert_any_call(["git", "add", "."], cwd=worktree_path, check=False, capture_output=True)
-        mock_run.assert_any_call(["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"], cwd=worktree_path, check=False, capture_output=True)
+        mock_run.assert_any_call(["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"], cwd=worktree_path, check=False, capture_output=True, text=True)
         
         # 2. Push call
         mock_run.assert_any_call(["git", "push", "origin", f"scv/{objective_id}"], cwd=project_root, check=False, capture_output=True, text=True)
         
-        # 3. Worktree remove call
-        mock_run.assert_any_call(["bd", "worktree", "remove", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
+        # 3. Worktree remove call (with --force)
+        mock_run.assert_any_call(["bd", "worktree", "remove", "--force", worktree_path], cwd=project_root, check=False, capture_output=True, text=True)
         
         # 4. Resolved prompt cleanup
         mock_remove.assert_called_with(resolved_path)
+
+    @patch("subprocess.run")
+    @patch("os.path.exists")
+    @patch("adjutant.engine.logger")
+    def test_cleanup_scv_fail_log(self, mock_logger, mock_exists, mock_run):
+        project_root = "/tmp/project"
+        objective_id = "test-obj"
+        worktree_path = os.path.join(project_root, ".adjutant", "worktrees", objective_id)
+        
+        # Case: bd worktree remove fails
+        mock_res = MagicMock()
+        mock_res.returncode = 1
+        mock_res.stderr = "Error: something went wrong"
+        mock_run.return_value = mock_res
+        
+        # Worktree still exists after attempt
+        mock_exists.return_value = True
+        
+        cleanup_scv(objective_id, project_root)
+        
+        # Verify logger.error was called for the failure
+        mock_logger.error.assert_any_call(f"Failed to remove worktree {worktree_path} via 'bd worktree' (exit code 1): Error: something went wrong")
+        mock_logger.error.assert_any_call(f"Worktree directory STILL exists at {worktree_path} after 'bd worktree remove' attempt.")
 
 if __name__ == "__main__":
     unittest.main()

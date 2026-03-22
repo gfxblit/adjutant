@@ -358,42 +358,59 @@ def cleanup_scv(objective_id: str, project_root: str):
                 check=False,
                 capture_output=True
             )
-            subprocess.run(
+            res = subprocess.run(
                 ["git", "commit", "-m", f"Auto-commit stranded work for {objective_id}"],
                 cwd=worktree_path,
                 check=False,
-                capture_output=True
+                capture_output=True,
+                text=True
             )
-            logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
+            if res.returncode == 0:
+                logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
+            else:
+                # 'nothing to commit' is not an error here
+                if "nothing to commit" not in (res.stdout + res.stderr).lower():
+                    logger.warning(f"Failed to auto-commit in {worktree_path} (exit code {res.returncode}): {res.stderr.strip()}")
         except Exception as e:
-            logger.info(f"Failed to auto-commit in worktree {worktree_path}: {e}")
+            logger.error(f"Failed to auto-commit in worktree {worktree_path}: {e}")
 
     # 2. Push the branch
     try:
-        subprocess.run(
+        res = subprocess.run(
             ["git", "push", "origin", branch_name],
             cwd=project_root,
             check=False,
             capture_output=True,
             text=True
         )
-        logger.info(f"Pushed branch {branch_name} to origin.")
+        if res.returncode == 0:
+            logger.info(f"Pushed branch {branch_name} to origin.")
+        else:
+            logger.warning(f"Failed to push branch {branch_name} (exit code {res.returncode}): {res.stderr.strip()}")
     except Exception as e:
-        logger.info(f"Failed to push branch {branch_name}: {e}")
+        logger.error(f"Failed to push branch {branch_name}: {e}")
 
     # 3. Cleanup worktree
     if os.path.exists(worktree_path):
         try:
-            subprocess.run(
-                ["bd", "worktree", "remove", worktree_path],
+            # We use --force to ensure cleanup even if there are unpushed commits (though we try to push above)
+            res = subprocess.run(
+                ["bd", "worktree", "remove", "--force", worktree_path],
                 cwd=project_root,
                 check=False,
                 capture_output=True,
                 text=True
             )
-            logger.info(f"Removed worktree at {worktree_path} via 'bd worktree'")
+            if res.returncode == 0:
+                logger.info(f"Removed worktree at {worktree_path} via 'bd worktree'")
+            else:
+                logger.error(f"Failed to remove worktree {worktree_path} via 'bd worktree' (exit code {res.returncode}): {res.stderr.strip()}")
+            
+            # Double check if directory still exists
+            if os.path.exists(worktree_path):
+                logger.error(f"Worktree directory STILL exists at {worktree_path} after 'bd worktree remove' attempt.")
         except Exception as e:
-            logger.info(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
+            logger.error(f"Failed to remove worktree {worktree_path} via 'bd worktree': {e}")
 
     # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
@@ -401,7 +418,7 @@ def cleanup_scv(objective_id: str, project_root: str):
             os.remove(resolved_system_prompt_path)
             logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
         except Exception as e:
-            logger.info(f"Failed to remove resolved system prompt: {e}")
+            logger.error(f"Failed to remove resolved system prompt: {e}")
 
 
 def recover_orphaned_scvs(project_root: str):
