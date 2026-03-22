@@ -5,6 +5,7 @@ import signal
 import threading
 import json
 import logging
+import shlex
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -605,6 +606,20 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         "-p", directive
     ]
     
+    # Log system prompt and command to the objective's log file
+    with open(log_path, "a") as f:
+        f.write(f"\n{'='*80}\n")
+        f.write(f"SCV SPAWN: {datetime.now(timezone.utc).isoformat()}\n")
+        f.write(f"AGENT: {agent_name}\n")
+        f.write(f"MODEL: {model}\n")
+        f.write(f"{'-'*80}\n")
+        f.write("SYSTEM PROMPT:\n")
+        f.write(prompt)
+        f.write(f"\n{'-'*80}\n")
+        f.write("COMMAND:\n")
+        f.write(shlex.join(cmd))
+        f.write(f"\n{'='*80}\n\n")
+
     log_file = open(log_path, "a")
     process = subprocess.Popen(
         cmd,
