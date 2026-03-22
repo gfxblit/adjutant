@@ -64,6 +64,9 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run,
     # Verify cwd is set to worktree
     assert kwargs.get("cwd", "").endswith(f"worktrees/{objective_id}")
 
+    # Verify ADJUTANT_DISABLE_HOOK=1 is set in env
+    assert kwargs.get("env", {}).get("ADJUTANT_DISABLE_HOOK") == "1"
+
     # Verify log file was closed in parent
     mock_file = m.return_value
     mock_file.close.assert_called()

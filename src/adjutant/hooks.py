@@ -1,11 +1,14 @@
 import subprocess
 import json
 import sys
+import os
 
 def get_mission_telemetry():
     """
     Returns a formatted string containing current open objectives and recent activity summary.
     """
+    if os.environ.get("ADJUTANT_DISABLE_HOOK") == "1":
+        return ""
     try:
         # Get all issues in one call for better performance and to reduce potential timeout issues
         output = subprocess.check_output(["bd", "list", "--all", "--json"], stderr=subprocess.DEVNULL, timeout=5.0)
@@ -47,6 +50,12 @@ def main():
     Reads JSON from stdin, gathers telemetry, and writes JSON response to stdout.
     """
     try:
+        if os.environ.get("ADJUTANT_DISABLE_HOOK") == "1":
+            # Early exit for disabled hook
+            sys.stdout.write(json.dumps({"hookSpecificOutput": {}}))
+            sys.stdout.flush()
+            return
+
         # Read JSON from stdin
         # Gemini's BeforeAgent hook provides mission info, but we don't strictly need it yet
         # for telemetry as we pull it from bd locally.
