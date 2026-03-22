@@ -1,11 +1,17 @@
 import argparse
 import sys
 import os
-from adjutant.engine import run_adjutant_agent, spawn_agent, recover_orphaned_scvs, show_status, setup_logging
+from adjutant.engine import (
+    run_adjutant_agent, 
+    spawn_agent, 
+    recover_orphaned_scvs, 
+    show_status, 
+    setup_logging, 
+    get_project_root
+)
 from adjutant.ui import run_ui
 
 def main():
-    setup_logging(to_stdout=True)
     parser = argparse.ArgumentParser(description="Adjutant Autonomous Development Loop")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -36,20 +42,25 @@ def main():
     
     args = parser.parse_args()
 
+    project_root = get_project_root()
+    log_path = os.path.join(project_root, ".adjutant", "logs", "adjutant.log")
+
     if args.command == "run-agent":
+        setup_logging(to_stdout=False, log_file=log_path)
         spawn_kwargs = {}
         if args.directive:
             spawn_kwargs["directive"] = args.directive
         spawn_agent(args.agent, args.objective_id, **spawn_kwargs)
     elif args.command == "recover":
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        project_root = os.path.dirname(base_dir)
+        setup_logging(to_stdout=False, log_file=log_path)
         print("Initiating SCV worktree recovery...")
         recover_orphaned_scvs(project_root)
         print("Recovery complete.")
     elif args.command == "status":
+        setup_logging(to_stdout=True, log_file=log_path)
         show_status()
     elif args.command == "ui":
+        setup_logging(to_stdout=False, log_file=log_path)
         mission_args = getattr(args, "mission", [])
         mission_directive = " ".join(mission_args)
         if not mission_directive:
@@ -61,6 +72,7 @@ def main():
         mission_directive = " ".join(mission_args)
         if not mission_directive:
             mission_directive = "I'm ready to assist with a mission."
+        # run_adjutant_agent handles its own logging setup, but we can set it here too for consistency
         run_adjutant_agent(mission_directive)
 
 if __name__ == "__main__":
