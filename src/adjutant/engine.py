@@ -612,29 +612,19 @@ def show_status():
                 
                 scv_info_str = ""
                 time_info = ""
+                
+                # Determine duration from start_time (best) or updated_at (fallback)
+                scv_info = registry.get(obj_id, {})
+                best_ts = scv_info.get("start_time") or updated_ats.get(obj_id)
+                duration = format_duration(best_ts) if best_ts else None
+
                 if obj_id in registry:
-                    info = registry[obj_id]
-                    agent = info.get("agent_name", "???")
-                    pid = info.get("pid", "???")
-                    start_time = info.get("start_time")
-                    
-                    if start_time:
-                        duration = format_duration(start_time)
-                        scv_info_str = f" [{agent} | PID: {pid} | Running: {duration}]"
-                    else:
-                        # Fallback to bd updated_at if start_time not in info
-                        updated_at = updated_ats.get(obj_id)
-                        if updated_at:
-                            duration = format_duration(updated_at)
-                            scv_info_str = f" [{agent} | PID: {pid} | Running: {duration}]"
-                        else:
-                            scv_info_str = f" [{agent} | PID: {pid} | Running]"
-                else:
-                    # In-progress in bd but no running SCV found
-                    updated_at = updated_ats.get(obj_id)
-                    if updated_at:
-                        duration = format_duration(updated_at)
-                        time_info = f" (In progress: {duration})"
+                    agent = scv_info.get("agent_name", "???")
+                    pid = scv_info.get("pid", "???")
+                    run_suffix = f": {duration}" if duration and duration != "???" else ""
+                    scv_info_str = f" [{agent} | PID: {pid} | Running{run_suffix}]"
+                elif duration and duration != "???":
+                    time_info = f" (In progress: {duration})"
                 
                 status_icon = "◐" if obj_id in ip_ids else "⚠️"
                 print(f"  {status_icon} {obj_id}: {title}{time_info}{scv_info_str}")
