@@ -377,6 +377,35 @@ def cleanup_scv(objective_id: str, project_root: str):
         except Exception as e:
             logger.error(f"Failed to remove resolved system prompt: {e}")
 
+    # 5. Remove the git worktree
+    try:
+        # Use 'bd worktree remove' to ensure any beads-specific cleanup also happens.
+        # Use --force to remove it even if it has untracked files or other issues.
+        res = subprocess.run(
+            ["bd", "worktree", "remove", objective_id, "--force"],
+            cwd=project_root,
+            check=False,
+            capture_output=True,
+            text=True
+        )
+        if res.returncode == 0:
+            logger.info(f"Removed git worktree for {objective_id} via 'bd worktree remove'.")
+        else:
+            # Fallback to git worktree remove if bd fails for some reason
+            res_git = subprocess.run(
+                ["git", "worktree", "remove", "--force", worktree_path],
+                cwd=project_root,
+                check=False,
+                capture_output=True,
+                text=True
+            )
+            if res_git.returncode == 0:
+                logger.info(f"Removed git worktree for {objective_id} via 'git worktree remove' (bd failed).")
+            else:
+                logger.error(f"Failed to remove git worktree for {objective_id} (exit code {res_git.returncode}): {res_git.stderr.strip()}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during worktree removal: {e}")
+
 
 def recover_orphaned_scvs(project_root: str):
     """
@@ -510,6 +539,19 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             logger.info(f"Worktree or branch already exists for {objective_id}. Proceeding.")
         else:
             raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
+
+    # Explicitly ensure .beads/redirect exists for shared beads database access.
+    # Relative path from .adjutant/worktrees/objective_id/.beads/redirect to project-root/.beads is ../../../.beads
+    beads_dir = os.path.join(worktree_path, ".beads")
+    os.makedirs(beads_dir, exist_ok=True)
+    redirect_path = os.path.join(beads_dir, "redirect")
+    if not os.path.exists(redirect_path):
+        try:
+            with open(redirect_path, "w") as f:
+                f.write("../../../.beads\n")
+            logger.info(f"Initialized .beads/redirect in worktree {objective_id}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize .beads/redirect: {e}")
 
     telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
     os.makedirs(telemetry_dir, exist_ok=True)

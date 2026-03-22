@@ -1,5 +1,5 @@
 import sys
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from adjutant.cli import main
 
 def test_plan_subcommand():
@@ -34,3 +34,20 @@ def test_run_agent_subcommand():
         with patch("adjutant.cli.spawn_agent") as mock_spawn:
             main()
             mock_spawn.assert_called_once_with("scv-coder", "adjutant-123")
+
+def test_recover_subcommand():
+    # Test 'recover' subcommand
+    test_args = ["adjutant", "recover"]
+    with patch.object(sys, "argv", test_args):
+        with patch("adjutant.cli.recover_orphaned_scvs") as mock_recover:
+            with patch("adjutant.cli.get_project_root", return_value="/tmp/project"):
+                main()
+                mock_recover.assert_called_once_with("/tmp/project")
+
+def test_status_subcommand():
+    # Test 'status' subcommand
+    test_args = ["adjutant", "status"]
+    with patch.object(sys, "argv", test_args):
+        with patch("adjutant.cli.show_status") as mock_status:
+            main()
+            mock_status.assert_called_once()
