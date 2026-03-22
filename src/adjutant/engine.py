@@ -555,7 +555,7 @@ def show_status():
         progress = (closed / total * 100) if total > 0 else 0
         print(f"📊 Adjutant Mission: {progress:.1f}% ({closed}/{total} closed)")
         print(f"   Status: ○ {open_issues} open | ◐ {in_progress} in progress | ● {blocked} blocked | ✓ {closed} closed")
-    except Exception:
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
         print("Could not retrieve mission status summary from bd.")
 
     # 2. Unified Active Objectives and SCVs
