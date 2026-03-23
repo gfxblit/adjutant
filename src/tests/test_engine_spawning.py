@@ -122,6 +122,43 @@ def test_spawn_agent_scv_tester(mock_exists, mock_makedirs, mock_popen, mock_run
     cmd = args[0]
     assert cmd[0] == "gemini"
 
+@patch("adjutant.engine.get_project_root")
+@patch("subprocess.run")
+@patch("subprocess.Popen")
+@patch("os.makedirs")
+@patch("os.path.exists")
+def test_spawn_agent_logs_prompt_and_command(mock_exists, mock_makedirs, mock_popen, mock_run, mock_get_root):
+    # Setup
+    agent_name = "scv-coder"
+    objective_id = "test-obj-logs"
+    project_root = "/mock/project"
+    mock_get_root.return_value = project_root
+    mock_exists.return_value = True
+    mock_popen.return_value.pid = 999
+    
+    system_prompt_content = "Coder Prompt for {objective_id}"
+    m = mock_open(read_data=system_prompt_content)
+    
+    with patch("builtins.open", m):
+        # Execute
+        spawn_agent(agent_name, objective_id)
+    
+    # Verify that the log file was opened for appending
+    log_path = os.path.join(project_root, ".adjutant", "logs", f"{objective_id}.log")
+    
+    # Verify content written to log file
+    handle = m()
+    all_writes = [call[0][0] for call in handle.write.call_args_list]
+    full_content = "".join(all_writes)
+    
+    assert "SCV SPAWN:" in full_content
+    assert f"AGENT: {agent_name}" in full_content
+    assert "SYSTEM PROMPT:" in full_content
+    assert f"Coder Prompt for {objective_id}" in full_content
+    assert "COMMAND:" in full_content
+    assert "gemini" in full_content
+    assert "--model" in full_content
+
 def test_spawn_agent_invalid_name():
     with pytest.raises(ValueError, match="Unknown agent or missing system prompt: invalid-agent"):
         spawn_agent("invalid-agent", "some-id")
