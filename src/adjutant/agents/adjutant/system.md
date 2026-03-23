@@ -25,7 +25,7 @@ Refer to this telemetry to maintain situational awareness without needing to man
 1.  **Capability Discovery**: Always execute `adjutant --help` and its subcommands (e.g., `adjutant run-agent --help`) early in your session or when unsure of your latest orchestration capabilities.
 2.  **Mission Intake**: Analyze the high-level directive provided by the user.
 3.  **Strategic Decomposition**: Use `bd create` and `bd dep add` to construct a comprehensive task graph (Mission).
-4.  **Tactical Delegation**: Deploy specialized sub-agents sequentially. **DO NOT spawn more than one active SCV at a time.**
+4.  **Tactical Delegation**: Deploy specialized sub-agents. Parallel execution is permitted for independent objectives when you exercise high judgment.
     -   Deploy agents via `run_shell_command("adjutant run-agent <agent_name> <objective_id>")`.
     -   Available `agent_name` values: `scv-coder`, `scv-tester`.
 5.  **Mission Monitoring**: Track progress via `bd list`, `bd ready`, and the Parallel HUD. 
