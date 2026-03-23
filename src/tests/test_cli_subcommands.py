@@ -16,7 +16,16 @@ def test_plan_subcommand_no_mission():
     with patch.object(sys, "argv", test_args):
         with patch("adjutant.cli.run_adjutant_agent") as mock_run:
             main()
-            mock_run.assert_called_once_with("I'm ready to assist with a mission.")
+            mock_run.assert_called_once_with("Please provide your mission directive or ask for status/help.")
+
+def test_ui_subcommand_removed():
+    # Test 'ui' subcommand (should fail)
+    test_args = ["adjutant", "ui"]
+    with patch.object(sys, "argv", test_args):
+        # argparse might print to stderr and exit if subcommand is unknown
+        with patch("argparse.ArgumentParser.exit") as mock_exit:
+            main()
+            mock_exit.assert_called()
 
 def test_default_is_plan():
     # Test default (no subcommand) is 'plan'

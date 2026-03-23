@@ -16,4 +16,4 @@ def test_main_no_args():
     with patch.object(sys, "argv", test_args):
         with patch("adjutant.cli.run_adjutant_agent") as mock_run:
             main()
-            mock_run.assert_called_once_with("I'm ready to assist with a mission.")
+            mock_run.assert_called_once_with("Please provide your mission directive or ask for status/help.")
