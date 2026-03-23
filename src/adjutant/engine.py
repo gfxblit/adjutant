@@ -745,9 +745,9 @@ def show_logs(objective_id: Optional[str] = None, follow: bool = False):
 
     if follow:
         try:
+            import shutil
             # Use tail -f if available, otherwise a simple loop
-            # Check if tail exists
-            if subprocess.run(["which", "tail"], capture_output=True).returncode == 0:
+            if shutil.which("tail"):
                 subprocess.run(["tail", "-f", log_path])
             else:
                 import time
