@@ -18,14 +18,13 @@ def test_plan_subcommand_no_mission():
             main()
             mock_run.assert_called_once_with("Please provide your mission directive or ask for status/help.")
 
-def test_ui_subcommand_removed():
-    # Test 'ui' subcommand (should fail)
-    test_args = ["adjutant", "ui"]
+def test_unknown_command_falls_back_to_plan():
+    # Test unknown command (should fall back to 'plan')
+    test_args = ["adjutant", "unknown-command"]
     with patch.object(sys, "argv", test_args):
-        # argparse might print to stderr and exit if subcommand is unknown
-        with patch("argparse.ArgumentParser.exit") as mock_exit:
+        with patch("adjutant.cli.run_adjutant_agent") as mock_run:
             main()
-            mock_exit.assert_called()
+            mock_run.assert_called_once_with("unknown-command")
 
 def test_default_is_plan():
     # Test default (no subcommand) is 'plan'
@@ -51,18 +50,22 @@ def test_run_agent_subcommand():
                         log_file="/tmp/project/.adjutant/logs/adjutant.log"
                     )
 
-def test_abort_subcommand():
-    # Test 'abort' subcommand
-    test_args = ["adjutant", "abort", "adjutant-123"]
+def test_logs_subcommand():
+    # Test 'logs' subcommand
+    test_args = ["adjutant", "logs", "adjutant-123"]
     with patch.object(sys, "argv", test_args):
-        # Patch it in engine where it's defined
-        with patch("adjutant.engine.abort_scv") as mock_abort:
-            with patch("adjutant.cli.setup_logging") as mock_setup_logging:
-                with patch("adjutant.cli.get_project_root") as mock_get_root:
-                    mock_get_root.return_value = "/tmp/project"
-                    main()
-                    mock_abort.assert_called_once_with("adjutant-123")
-                    mock_setup_logging.assert_called_once_with(
-                        to_stdout=True, 
-                        log_file="/tmp/project/.adjutant/logs/adjutant.log"
-                    )
+        with patch("adjutant.cli.show_logs") as mock_show_logs:
+            with patch("adjutant.cli.get_project_root") as mock_get_root:
+                mock_get_root.return_value = "/tmp/project"
+                main()
+                mock_show_logs.assert_called_once_with("adjutant-123", follow=False)
+
+def test_logs_subcommand_follow():
+    # Test 'logs -f' subcommand
+    test_args = ["adjutant", "logs", "-f", "adjutant-123"]
+    with patch.object(sys, "argv", test_args):
+        with patch("adjutant.cli.show_logs") as mock_show_logs:
+            with patch("adjutant.cli.get_project_root") as mock_get_root:
+                mock_get_root.return_value = "/tmp/project"
+                main()
+                mock_show_logs.assert_called_once_with("adjutant-123", follow=True)

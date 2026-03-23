@@ -6,6 +6,7 @@ from adjutant.engine import (
     spawn_agent, 
     recover_orphaned_scvs, 
     show_status, 
+    show_logs,
     setup_logging, 
     get_project_root
 )
@@ -25,6 +26,11 @@ def main():
     run_agent_parser.add_argument("agent", help="Agent name (e.g. scv-coder)")
     run_agent_parser.add_argument("objective_id", help="Objective ID to work on")
     run_agent_parser.add_argument("--directive", help="Custom mission directive for the agent")
+
+    # logs subcommand
+    logs_parser = subparsers.add_parser("logs", help="Show logs for a mission or SCV")
+    logs_parser.add_argument("objective_id", nargs="?", help="Objective ID (e.g. h6z or adjutant-h6z)")
+    logs_parser.add_argument("-f", "--follow", action="store_true", help="Follow log output")
 
     # recover subcommand
     subparsers.add_parser("recover", help="Recover stranded SCV work from orphaned worktrees")
@@ -66,6 +72,9 @@ def main():
     elif args.command == "status":
         setup_logging(to_stdout=True, log_file=log_path)
         show_status()
+    elif args.command == "logs":
+        setup_logging(to_stdout=True, log_file=log_path)
+        show_logs(args.objective_id, follow=args.follow)
     else:
         # Default behavior: run the planning agent
         mission_args = getattr(args, "mission", [])
