@@ -462,40 +462,6 @@ def recover_orphaned_scvs(project_root: str):
         cleanup_scv(entry, project_root)
 
 
-def show_logs(mission_id: str, follow: bool = False):
-    """
-    Displays the logs for a specific mission or the main adjutant log.
-    """
-    project_root = get_project_root()
-    log_dir = os.path.join(project_root, ".adjutant", "logs")
-    
-    # If mission_id is 'adjutant', show adjutant.log
-    if mission_id == "adjutant":
-        log_path = os.path.join(log_dir, "adjutant.log")
-    else:
-        log_path = os.path.join(log_dir, f"{mission_id}.log")
-
-    if not os.path.exists(log_path):
-        print(f"Error: Log file not found at {log_path}")
-        return
-
-    try:
-        if follow:
-            # Use tail -f if available, otherwise just print once
-            try:
-                subprocess.run(["tail", "-f", log_path], check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                with open(log_path, "r") as f:
-                    print(f.read())
-        else:
-            with open(log_path, "r") as f:
-                # For very large logs, we might want to tail it anyway, but let's just print for now
-                print(f.read())
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        print(f"Error reading logs: {e}")
-
 
 def run_adjutant_agent(initial_directive: str):
     """
