@@ -278,6 +278,7 @@ class SCVOverseer:
                                 continue 
                             else:
                                 logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting.")
+                                should_restart = False
                     except IOError:
                         logger.warning(f"[Overseer] Could not read log file {log_path} for {objective_id}.")
                 
