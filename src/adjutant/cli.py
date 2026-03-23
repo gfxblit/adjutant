@@ -38,7 +38,7 @@ def main():
 
     # Handle default 'plan' subcommand for backward compatibility
     # If the first argument is not a known command or help, and there are args, assume 'plan'
-    known_commands = ["plan", "ui", "run-agent", "recover", "status", "abort", "-h", "--help"]
+    known_commands = list(subparsers.choices.keys()) + ["-h", "--help"]
     if len(sys.argv) > 1 and sys.argv[1] not in known_commands:
         sys.argv.insert(1, "plan")
     
