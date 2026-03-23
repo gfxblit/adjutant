@@ -187,5 +187,39 @@ class TestSCVOverseerWorktrees(unittest.TestCase):
         # Verify cleanup
         mock_cleanup.assert_called_with("obj-done", self.overseer.project_root)
 
+    @patch("adjutant.engine.SCVOverseer._get_registry_from_worktrees")
+    @patch("os.path.exists")
+    @patch("os.kill")
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("adjutant.engine.cleanup_scv")
+    def test_check_scvs_exhausted_cleanup(self, mock_cleanup, mock_open_file, mock_kill, mock_exists, mock_get_registry):
+        # Setup registry with last model
+        registry = {
+            "obj-exhausted": {
+                "pid": 777,
+                "agent_name": "scv-coder",
+                "model": self.overseer.MODELS[-1]
+            }
+        }
+        mock_get_registry.return_value = registry
+        
+        # Mock crash: is_process_running(777) -> False
+        mock_kill.side_effect = ProcessLookupError()
+        
+        # Setup mock_open for different files
+        def open_side_effect(path, mode="r"):
+            if "obj-exhausted.log" in path:
+                return mock_open(read_data="RESOURCE_EXHAUSTED").return_value
+            return mock_open().return_value
+
+        mock_open_file.side_effect = open_side_effect
+        mock_exists.return_value = True
+        
+        # Execute
+        self.overseer._check_scvs()
+        
+        # Verify cleanup
+        mock_cleanup.assert_called_with("obj-exhausted", self.overseer.project_root)
+
 if __name__ == "__main__":
     unittest.main()
