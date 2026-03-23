@@ -462,6 +462,41 @@ def recover_orphaned_scvs(project_root: str):
         cleanup_scv(entry, project_root)
 
 
+def show_logs(mission_id: str, follow: bool = False):
+    """
+    Displays the logs for a specific mission or the main adjutant log.
+    """
+    project_root = get_project_root()
+    log_dir = os.path.join(project_root, ".adjutant", "logs")
+    
+    # If mission_id is 'adjutant', show adjutant.log
+    if mission_id == "adjutant":
+        log_path = os.path.join(log_dir, "adjutant.log")
+    else:
+        log_path = os.path.join(log_dir, f"{mission_id}.log")
+
+    if not os.path.exists(log_path):
+        print(f"Error: Log file not found at {log_path}")
+        return
+
+    try:
+        if follow:
+            # Use tail -f if available, otherwise just print once
+            try:
+                subprocess.run(["tail", "-f", log_path], check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                with open(log_path, "r") as f:
+                    print(f.read())
+        else:
+            with open(log_path, "r") as f:
+                # For very large logs, we might want to tail it anyway, but let's just print for now
+                print(f.read())
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        print(f"Error reading logs: {e}")
+
+
 def run_adjutant_agent(initial_directive: str):
     """
     Launches the Adjutant (Planner) agent as an interactive Gemini session.
@@ -720,3 +755,56 @@ def show_status():
                 print(f"  ? {obj_id}: [SCV Running] [{agent} | PID: {pid} | Running{run_suffix}]")
         else:
             print("  (None)")
+
+def show_logs(objective_id: Optional[str] = None, follow: bool = False):
+    """Shows the logs for a given objective or the main adjutant log."""
+    project_root = get_project_root()
+    log_dir = os.path.join(project_root, ".adjutant", "logs")
+    
+    if not objective_id:
+        log_path = os.path.join(log_dir, "adjutant.log")
+    else:
+        # Try exact match first
+        log_path = os.path.join(log_dir, f"{objective_id}.log")
+        if not os.path.exists(log_path):
+            # Try with adjutant- prefix if not present
+            if not objective_id.startswith("adjutant-"):
+                alt_path = os.path.join(log_dir, f"adjutant-{objective_id}.log")
+                if os.path.exists(alt_path):
+                    log_path = alt_path
+    
+    if not os.path.exists(log_path):
+        print(f"No logs found at {log_path}")
+        return
+
+    if follow:
+        try:
+            # Use tail -f if available, otherwise a simple loop
+            # Check if tail exists
+            if subprocess.run(["which", "tail"], capture_output=True).returncode == 0:
+                subprocess.run(["tail", "-f", log_path])
+            else:
+                import time
+                with open(log_path, "r") as f:
+                    # Go to the end of file
+                    f.seek(0, os.SEEK_END)
+                    while True:
+                        line = f.readline()
+                        if not line:
+                            time.sleep(0.1)
+                            continue
+                        print(line, end="")
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            print(f"Error following logs: {e}")
+    else:
+        try:
+            with open(log_path, "r") as f:
+                # For large logs, maybe we only want the last N lines?
+                # But typically 'logs' shows everything unless tail is specified.
+                # However, for an agent log, it can be huge.
+                # Let's just print it all for now, as it's common for CLI logs.
+                print(f.read())
+        except Exception as e:
+            print(f"Error reading logs: {e}")
