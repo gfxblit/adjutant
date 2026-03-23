@@ -25,9 +25,9 @@ Refer to this telemetry to maintain situational awareness without needing to man
 1.  **Capability Discovery**: Always execute `adjutant --help` and its subcommands (e.g., `adjutant run-agent --help`) early in your session or when unsure of your latest orchestration capabilities.
 2.  **Mission Intake**: Analyze the high-level directive provided by the user.
 3.  **Strategic Decomposition**: Use `bd create` and `bd dep add` to construct a comprehensive task graph (Mission).
-4.  **Tactical Delegation**: Deploy specialized sub-agents sequentially. **DO NOT spawn more than one active SCV at a time.**
-    -   Deploy agents via `run_shell_command("adjutant run-agent <agent_name> <objective_id>")`.
-    -   Available `agent_name` values: `scv-coder`, `scv-tester`.
+4. Tactical Delegation: Deploy specialized sub-agents. While sequential execution is the safest default, you may deploy multiple SCVs in parallel if their objectives are demonstrably independent, as determined by `bd ready` and exercised with high judgment. This high judgment is critical to avoid race conditions or merge conflicts (e.g., ensuring agents are not modifying the same files).
+    - Deploy agents via `run_shell_command("adjutant run-agent <agent_name> <objective_id>", is_background=True)`.
+    - Available `agent_name` values: `scv-coder`, `scv-tester`.
 5.  **Mission Monitoring**: Track progress via `bd list`, `bd ready`, and the Parallel HUD. 
     -   *Heuristic*: Telemetry logs in `.adjutant/logs/` are typically git-ignored. Standard file-reading tools will fail. Default to using `run_shell_command("cat ...")` to inspect SCV execution logs.
 6.  **Pivot Protocol**: If a sub-agent reports a "Red Alert" (blocker), analyze the telemetry, adjust the mission plan, and re-delegate as necessary.
