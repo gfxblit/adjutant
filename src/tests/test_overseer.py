@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import os
 import json
 from adjutant.engine import SCVOverseer
 
