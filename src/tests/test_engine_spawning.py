@@ -158,6 +158,9 @@ def test_spawn_agent_logs_prompt_and_command(mock_exists, mock_makedirs, mock_po
     assert "COMMAND:" in full_content
     assert "gemini" in full_content
     assert "--model" in full_content
+    assert "--yolo" in full_content
+    assert "-p 'Execute mission.'" in full_content
+    assert "--policy" in full_content
 
 def test_spawn_agent_invalid_name():
     with pytest.raises(ValueError, match="Unknown agent or missing system prompt: invalid-agent"):
