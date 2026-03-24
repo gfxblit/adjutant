@@ -643,7 +643,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
                 "model": model,
                 "start_time": datetime.now(timezone.utc).isoformat()
             }, f, indent=2)
-    except IOError as e:
+    except Exception as e:
         logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
 
     logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
