@@ -2,6 +2,7 @@ import sys
 from unittest.mock import patch
 from adjutant.cli import main
 
+
 def test_plan_subcommand():
     # Test 'plan' subcommand with mission
     test_args = ["adjutant", "plan", "Build", "a", "base"]
@@ -10,13 +11,17 @@ def test_plan_subcommand():
             main()
             mock_run.assert_called_once_with("Build a base")
 
+
 def test_plan_subcommand_no_mission():
     # Test 'plan' subcommand with no mission
     test_args = ["adjutant", "plan"]
     with patch.object(sys, "argv", test_args):
         with patch("adjutant.cli.run_adjutant_agent") as mock_run:
             main()
-            mock_run.assert_called_once_with("Please provide your mission directive or ask for status/help.")
+            mock_run.assert_called_once_with(
+                "Please provide your mission directive or ask for status/help."
+            )
+
 
 def test_unknown_command_falls_back_to_plan():
     # Test unknown command (should fall back to 'plan')
@@ -26,6 +31,7 @@ def test_unknown_command_falls_back_to_plan():
             main()
             mock_run.assert_called_once_with("unknown-command")
 
+
 def test_default_is_plan():
     # Test default (no subcommand) is 'plan'
     test_args = ["adjutant", "Build", "a", "base"]
@@ -33,6 +39,7 @@ def test_default_is_plan():
         with patch("adjutant.cli.run_adjutant_agent") as mock_run:
             main()
             mock_run.assert_called_once_with("Build a base")
+
 
 def test_run_agent_subcommand():
     # Test 'run-agent' subcommand
@@ -46,9 +53,10 @@ def test_run_agent_subcommand():
                     main()
                     mock_spawn.assert_called_once_with("scv-coder", "adjutant-123")
                     mock_setup_logging.assert_called_once_with(
-                        to_stdout=False, 
-                        log_file="/tmp/project/.adjutant/logs/adjutant.log"
+                        to_stdout=False,
+                        log_file="/tmp/project/.adjutant/logs/adjutant.log",
                     )
+
 
 def test_logs_subcommand():
     # Test 'logs' subcommand
@@ -59,6 +67,7 @@ def test_logs_subcommand():
                 mock_get_root.return_value = "/tmp/project"
                 main()
                 mock_show_logs.assert_called_once_with("adjutant-123", follow=False)
+
 
 def test_logs_subcommand_follow():
     # Test 'logs -f' subcommand

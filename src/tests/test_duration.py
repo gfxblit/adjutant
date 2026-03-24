@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timezone, timedelta
 from adjutant.engine import format_duration
 
+
 class TestDurationFormatting(unittest.TestCase):
     def test_format_duration_seconds(self):
         now = datetime.now(timezone.utc)
@@ -39,6 +40,7 @@ class TestDurationFormatting(unittest.TestCase):
         # Just ensure it doesn't crash and returns something other than ???
         duration = format_duration(iso_date)
         self.assertNotEqual(duration, "???")
+
 
 if __name__ == "__main__":
     unittest.main()

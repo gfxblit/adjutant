@@ -12,6 +12,7 @@ from typing import Optional
 # Setup logger
 logger = logging.getLogger("adjutant")
 
+
 def format_duration(iso_date: str) -> str:
     """Formats the duration from iso_date until now as a short string (e.g., 2h15m)."""
     if not iso_date or not isinstance(iso_date, str):
@@ -19,17 +20,17 @@ def format_duration(iso_date: str) -> str:
     try:
         # datetime.fromisoformat in older versions of Python doesn't handle 'Z' well.
         # Python 3.11+ does, but for safety we replace Z with +00:00.
-        dt = datetime.fromisoformat(iso_date.replace('Z', '+00:00'))
+        dt = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         duration = now - dt
         seconds = int(duration.total_seconds())
         if seconds < 0:
             return "0s"
-        
+
         days, rem = divmod(seconds, 86400)
         hours, rem = divmod(rem, 3600)
         minutes, seconds = divmod(rem, 60)
-        
+
         if days > 0:
             return f"{days}d{hours}h"
         if hours > 0:
@@ -40,6 +41,7 @@ def format_duration(iso_date: str) -> str:
     except (ValueError, TypeError):
         return "???"
 
+
 def setup_logging(to_stdout: bool = False, log_file: Optional[str] = None):
     """
     Configures the adjutant logger.
@@ -47,26 +49,28 @@ def setup_logging(to_stdout: bool = False, log_file: Optional[str] = None):
     # Remove existing handlers
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
-        
+
     logger.setLevel(logging.INFO)
-    
+
     # We use a formatter for file logging, but for stdout we might want a simpler one
     # or none at all if we are mimicking print.
     # To mimic print, we use a simple formatter or just the message.
     if to_stdout:
         handler = logging.StreamHandler(sys.stdout)
         # No special format for stdout to keep it clean and mimic print
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
-    
+
     if log_file:
         # Ensure directory exists
         log_dir = os.path.dirname(log_file)
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
-        
+
         handler = logging.FileHandler(log_file)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -107,7 +111,7 @@ def get_active_scvs(project_root: str) -> dict:
 
     for entry in os.listdir(worktrees_dir):
         worktree_path = os.path.join(worktrees_dir, entry)
-        if os.path.isdir(worktree_path) and not entry.startswith('.'):
+        if os.path.isdir(worktree_path) and not entry.startswith("."):
             scv_info_path = os.path.join(worktree_path, ".scv_info.json")
             if os.path.exists(scv_info_path):
                 try:
@@ -118,7 +122,9 @@ def get_active_scvs(project_root: str) -> dict:
                     if pid and is_process_running(pid):
                         active_scvs[entry] = scv_info
                 except (json.JSONDecodeError, IOError) as e:
-                    logger.warning(f"Could not read or parse SCV info from {scv_info_path}: {e}")
+                    logger.warning(
+                        f"Could not read or parse SCV info from {scv_info_path}: {e}"
+                    )
     return active_scvs
 
 
@@ -138,24 +144,31 @@ class AdjutantHUD:
             closed_issues = 0
             in_progress = 0
             total = 0
-            
+
             # 1. Get Mission status from bd
             try:
                 # Run bd status --json with a timeout
-                output = subprocess.check_output(["bd", "status", "--json"], stderr=subprocess.DEVNULL, timeout=2.0)
+                output = subprocess.check_output(
+                    ["bd", "status", "--json"], stderr=subprocess.DEVNULL, timeout=2.0
+                )
                 status_data = json.loads(output)
                 summary = status_data.get("summary", {})
-                
+
                 total = summary.get("total_issues", 0)
                 open_issues = summary.get("open_issues", 0)
                 closed_issues = summary.get("closed_issues", 0)
                 in_progress = summary.get("in_progress_issues", 0)
-                
+
                 progress = (closed_issues / total * 100) if total > 0 else 0
-            except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError, subprocess.TimeoutExpired):
+            except (
+                subprocess.CalledProcessError,
+                json.JSONDecodeError,
+                FileNotFoundError,
+                subprocess.TimeoutExpired,
+            ):
                 # If bd fails, we just use defaults for mission status
                 pass
-            
+
             # 2. Get SCV status by scanning worktrees
             registry = get_active_scvs(self.project_root)
             scv_count = len(registry)
@@ -164,7 +177,7 @@ class AdjutantHUD:
             # Format title string
             # Title: Mission: {MISSION} | {PROGRESS}% | {CLOSED}/{TOTAL} | Open: {OPEN}, IP: {IN_PROGRESS}
             title = f"Mission: {self.mission} | {progress:.1f}% | {closed_issues}/{total} | Open: {open_issues}, IP: {in_progress}"
-            
+
             if scv_count > 0:
                 short_ids = [s.replace("adjutant-", "") for s in scv_list]
                 # Limit length of listed SCVs in the title bar
@@ -172,7 +185,7 @@ class AdjutantHUD:
                 if scv_count > 3:
                     list_str += "..."
                 title += f" | SCVs: {scv_count} ({list_str})"
-            
+
             # Update terminal title using ANSI escape sequence
             sys.stdout.write(f"\033]0;{title}\007")
             sys.stdout.flush()
@@ -199,7 +212,11 @@ class AdjutantHUD:
 
 
 class SCVOverseer:
-    MODELS = ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-flash-lite"]
+    MODELS = [
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash-lite",
+    ]
 
     def __init__(self, interval: int = 10):
         self.interval = interval
@@ -214,10 +231,10 @@ class SCVOverseer:
         registry = {}
         if not os.path.exists(worktrees_dir):
             return registry
-            
+
         try:
             for entry in os.listdir(worktrees_dir):
-                if entry.startswith('.'):
+                if entry.startswith("."):
                     continue
                 worktree_path = os.path.join(worktrees_dir, entry)
                 if os.path.isdir(worktree_path):
@@ -234,57 +251,82 @@ class SCVOverseer:
         return registry
 
     def _check_scvs(self):
-        '''
+        """
         Scans worktrees for SCVs, checks their running status, and cleans up if necessary.
-        '''
+        """
         registry_from_worktrees = self._get_registry_from_worktrees()
-        
+
         if not registry_from_worktrees:
-            return # Nothing more to do if no SCVs found
+            return  # Nothing more to do if no SCVs found
 
         # Iterate through SCVs found in worktrees
         for objective_id, scv_info in registry_from_worktrees.items():
             pid = scv_info.get("pid")
             agent_name = scv_info.get("agent_name")
-            current_model = scv_info.get("model", self.MODELS[0]) # Get model for potential restart
-            
+            current_model = scv_info.get(
+                "model", self.MODELS[0]
+            )  # Get model for potential restart
+
             # Check if the process is running. If not, clean it up.
             if pid and not is_process_running(pid):
                 log_path = os.path.join(self.telemetry_dir, f"{objective_id}.log")
-                logger.warning(f"[Overseer] SCV for {objective_id} (PID: {pid}, Model: {current_model}) not running. Checking for restart conditions.")
-                
+                logger.warning(
+                    f"[Overseer] SCV for {objective_id} (PID: {pid}, Model: {current_model}) not running. Checking for restart conditions."
+                )
+
                 should_restart = False
                 # Check for specific crash conditions like capacity or quota errors
                 if os.path.exists(log_path):
                     try:
                         with open(log_path, "r") as f:
                             log_content = f.read()
-                        
-                        if any(s in log_content for s in ["MODEL_CAPACITY_EXHAUSTED", "RESOURCE_EXHAUSTED", "429", "QUOTA_EXHAUSTED", "TerminalQuotaError"]):
-                            logger.info(f"[Overseer] Detected crash for {objective_id} ({current_model}). Attempting restart with fallback model.")
+
+                        if any(
+                            s in log_content
+                            for s in [
+                                "MODEL_CAPACITY_EXHAUSTED",
+                                "RESOURCE_EXHAUSTED",
+                                "429",
+                                "QUOTA_EXHAUSTED",
+                                "TerminalQuotaError",
+                            ]
+                        ):
+                            logger.info(
+                                f"[Overseer] Detected crash for {objective_id} ({current_model}). Attempting restart with fallback model."
+                            )
                             should_restart = True
-                            
+
                             next_model = None
                             try:
                                 current_idx = self.MODELS.index(current_model)
                                 if current_idx + 1 < len(self.MODELS):
                                     next_model = self.MODELS[current_idx + 1]
                             except ValueError:
-                                next_model = self.MODELS[1] # fallback to flash
-                            
+                                next_model = self.MODELS[1]  # fallback to flash
+
                             if next_model:
-                                logger.info(f"[Overseer] Restarting {objective_id} with model: {next_model}")
-                                spawn_agent(agent_name, objective_id, starting_model=next_model)
-                                continue 
+                                logger.info(
+                                    f"[Overseer] Restarting {objective_id} with model: {next_model}"
+                                )
+                                spawn_agent(
+                                    agent_name, objective_id, starting_model=next_model
+                                )
+                                continue
                             else:
-                                logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting.")
+                                logger.warning(
+                                    f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting."
+                                )
                                 should_restart = False
                     except IOError:
-                        logger.warning(f"[Overseer] Could not read log file {log_path} for {objective_id}.")
-                
+                        logger.warning(
+                            f"[Overseer] Could not read log file {log_path} for {objective_id}."
+                        )
+
                 # If not restarting, proceed with cleanup.
                 if not should_restart:
-                    logger.info(f"[Overseer] Cleaning up SCV for {objective_id} as it is not running and not eligible for restart.")
+                    logger.info(
+                        f"[Overseer] Cleaning up SCV for {objective_id} as it is not running and not eligible for restart."
+                    )
                     cleanup_scv(objective_id, self.project_root)
 
     def _run(self):
@@ -312,18 +354,24 @@ def cleanup_scv(objective_id: str, project_root: str):
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     worktree_path = os.path.join(worktrees_dir, objective_id)
     branch_name = f"scv/{objective_id}"
-    resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
+    resolved_system_prompt_path = os.path.join(
+        worktrees_dir, f".resolved_system_{objective_id}.md"
+    )
 
     logger.info(f"\n[Cleaning up SCV for {objective_id}]")
 
     # 1. Check if worktree exists before proceeding
     if not os.path.exists(worktree_path):
-        logger.info(f"Worktree for {objective_id} does not exist at {worktree_path}. Skipping cleanup.")
+        logger.info(
+            f"Worktree for {objective_id} does not exist at {worktree_path}. Skipping cleanup."
+        )
         # Still attempt to clean up the resolved system prompt if it exists
         if os.path.exists(resolved_system_prompt_path):
             try:
                 os.remove(resolved_system_prompt_path)
-                logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
+                logger.info(
+                    f"Removed resolved system prompt: {resolved_system_prompt_path}"
+                )
             except Exception as e:
                 logger.error(f"Failed to remove resolved system prompt: {e}")
         return
@@ -331,7 +379,9 @@ def cleanup_scv(objective_id: str, project_root: str):
     # 2. Auto-commit any pending changes in the worktree
     try:
         # Use check=True for git add to ensure staging errors are caught.
-        subprocess.run(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=worktree_path, check=True, capture_output=True
+        )
         logger.debug(f"Staged all changes in {worktree_path}.")
 
         # Commit with check=False because 'nothing to commit' is a valid, non-error state.
@@ -340,13 +390,15 @@ def cleanup_scv(objective_id: str, project_root: str):
             cwd=worktree_path,
             check=False,
             capture_output=True,
-            text=True
+            text=True,
         )
         if res.returncode == 0:
             logger.info(f"Auto-committed any stranded changes in {worktree_path}.")
         elif "nothing to commit" not in (res.stdout + res.stderr).lower():
             # Log as an error if the exit code is non-zero and it's not the "nothing to commit" message.
-            logger.error(f"Failed to auto-commit in {worktree_path} (exit code {res.returncode}): {res.stderr.strip()}")
+            logger.error(
+                f"Failed to auto-commit in {worktree_path} (exit code {res.returncode}): {res.stderr.strip()}"
+            )
         else:
             logger.debug("No new changes to commit.")
     except subprocess.CalledProcessError as e:
@@ -354,31 +406,39 @@ def cleanup_scv(objective_id: str, project_root: str):
         logger.error(f"Error staging changes in {worktree_path}: {e.stderr.strip()}")
     except Exception as e:
         # Catch any other unexpected errors during the auto-commit process.
-        logger.error(f"An unexpected error occurred during auto-commit for {worktree_path}: {e}")
+        logger.error(
+            f"An unexpected error occurred during auto-commit for {worktree_path}: {e}"
+        )
 
     # 3. Push the branch
     try:
         res = subprocess.run(
             ["git", "push", "origin", branch_name],
             cwd=project_root,
-            check=False, # Do not fail script if push fails, just log it.
+            check=False,  # Do not fail script if push fails, just log it.
             capture_output=True,
-            text=True
+            text=True,
         )
         if res.returncode == 0:
             logger.info(f"Pushed branch {branch_name} to origin.")
         else:
             # Log error with stderr content for clarity on push failure.
-            logger.error(f"Failed to push branch {branch_name} (exit code {res.returncode}): {res.stderr.strip()}")
+            logger.error(
+                f"Failed to push branch {branch_name} (exit code {res.returncode}): {res.stderr.strip()}"
+            )
     except Exception as e:
         # Catch any other unexpected errors during the git push process.
-        logger.error(f"An unexpected error occurred during git push for {branch_name}: {e}")
+        logger.error(
+            f"An unexpected error occurred during git push for {branch_name}: {e}"
+        )
 
     # 4. Cleanup resolved system prompt
     if os.path.exists(resolved_system_prompt_path):
         try:
             os.remove(resolved_system_prompt_path)
-            logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
+            logger.info(
+                f"Removed resolved system prompt: {resolved_system_prompt_path}"
+            )
         except Exception as e:
             logger.error(f"Failed to remove resolved system prompt: {e}")
 
@@ -387,10 +447,19 @@ def cleanup_scv(objective_id: str, project_root: str):
         try:
             # Use --force because we already attempted to commit/push above,
             # and we want to ensure the worktree is actually removed.
-            subprocess.run(["bd", "worktree", "remove", objective_id, "--force"], cwd=project_root, check=True, capture_output=True)
-            logger.info(f"Removed worktree for {objective_id} via 'bd worktree remove --force'.")
+            subprocess.run(
+                ["bd", "worktree", "remove", objective_id, "--force"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+            )
+            logger.info(
+                f"Removed worktree for {objective_id} via 'bd worktree remove --force'."
+            )
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to remove worktree for {objective_id}: {e.stderr.decode().strip()}")
+            logger.error(
+                f"Failed to remove worktree for {objective_id}: {e.stderr.decode().strip()}"
+            )
         except Exception as e:
             logger.error(f"Unexpected error removing worktree for {objective_id}: {e}")
 
@@ -401,16 +470,18 @@ def abort_scv(objective_id: str):
     """
     project_root = get_project_root()
     active_scvs = get_active_scvs(project_root)
-    
+
     if objective_id not in active_scvs:
-        logger.warning(f"No active SCV found for objective {objective_id}. Attempting cleanup of orphaned worktree.")
+        logger.warning(
+            f"No active SCV found for objective {objective_id}. Attempting cleanup of orphaned worktree."
+        )
         # Still attempt cleanup in case the process died but worktree remains
         cleanup_scv(objective_id, project_root)
         return
 
     scv_info = active_scvs[objective_id]
     pid = scv_info.get("pid")
-    
+
     if pid:
         logger.info(f"Terminating SCV for {objective_id} (PID: {pid})...")
         try:
@@ -446,10 +517,10 @@ def recover_orphaned_scvs(project_root: str):
 
     active_scvs = get_active_scvs(project_root)
     found_orphans = []
-    
+
     for entry in os.listdir(worktrees_dir):
         worktree_path = os.path.join(worktrees_dir, entry)
-        if os.path.isdir(worktree_path) and not entry.startswith('.'):
+        if os.path.isdir(worktree_path) and not entry.startswith("."):
             if entry not in active_scvs:
                 found_orphans.append(entry)
 
@@ -458,10 +529,9 @@ def recover_orphaned_scvs(project_root: str):
         return
 
     logger.info(f"Found {len(found_orphans)} orphaned worktree(s). Cleaning up...")
-    
+
     for entry in found_orphans:
         cleanup_scv(entry, project_root)
-
 
 
 def run_adjutant_agent(initial_directive: str):
@@ -476,36 +546,46 @@ def run_adjutant_agent(initial_directive: str):
     setup_logging(to_stdout=False, log_file=log_path)
 
     logger.info("\n[Adjutant Online: Initiating Mission Planning]")
-    
+
     # Recover any orphaned SCVs from previous session
     recover_orphaned_scvs(project_root)
 
     adjutant_agent_dir = os.path.join(base_dir, "adjutant", "agents", "adjutant")
     system_prompt_path = os.path.join(adjutant_agent_dir, "system.md")
-    
+
     with open(system_prompt_path, "r") as f:
         system_prompt = f.read()
 
     temp_prompt_path = os.path.join(base_dir, ".adjutant_resolved_system.md")
     with open(temp_prompt_path, "w") as f:
         f.write(system_prompt)
-    
+
     env = os.environ.copy()
     env["GEMINI_SYSTEM_MD"] = temp_prompt_path
-    
+
     policy_dir = os.path.join(adjutant_agent_dir, "policies")
-    cmd = ["gemini", "--model", "gemini-3.1-pro-preview", "--policy", policy_dir, "-i", initial_directive]
-    
+    cmd = [
+        "gemini",
+        "--model",
+        "gemini-3.1-pro-preview",
+        "--policy",
+        policy_dir,
+        "-i",
+        initial_directive,
+    ]
+
     hud = AdjutantHUD(mission=initial_directive)
     hud.start()
 
     overseer = SCVOverseer()
     overseer.start()
-    
+
     try:
         subprocess.run(cmd, env=env, check=False)
     except FileNotFoundError:
-        logger.info("Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH.")
+        logger.info(
+            "Error: 'gemini' CLI not found. Please ensure it is installed and in your PATH."
+        )
         sys.exit(1)
     except Exception as e:
         logger.info(f"Error launching Adjutant: {e}")
@@ -517,26 +597,35 @@ def run_adjutant_agent(initial_directive: str):
             os.remove(temp_prompt_path)
 
 
-def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, directive: str = "Execute mission."):
+def spawn_agent(
+    agent_name: str,
+    objective_id: str,
+    starting_model: str = None,
+    directive: str = "Execute mission.",
+):
     """
     Spawns a sub-agent asynchronously.
     """
     # Mark the objective as in_progress in bd
     try:
-        subprocess.run(["bd", "update", objective_id, "--status", "in_progress"], check=False, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["bd", "update", objective_id, "--status", "in_progress"],
+            check=False,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception:
         pass
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     agent_dir = os.path.join(base_dir, "adjutant", "agents", agent_name)
     system_prompt_path = os.path.join(agent_dir, "system.md")
-    
+
     if not os.path.exists(system_prompt_path):
         raise ValueError(f"Unknown agent or missing system prompt: {agent_name}")
 
     with open(system_prompt_path, "r") as f:
         prompt_template = f.read()
-    
+
     prompt = prompt_template.format(objective_id=objective_id)
     project_root = get_project_root()
 
@@ -547,10 +636,12 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
 
     env = os.environ.copy()
     env["ADJUTANT_DISABLE_HOOK"] = "1"
-    resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
+    resolved_system_prompt_path = os.path.join(
+        worktrees_dir, f".resolved_system_{objective_id}.md"
+    )
     with open(resolved_system_prompt_path, "w") as f:
         f.write(prompt)
-    
+
     env["GEMINI_SYSTEM_MD"] = resolved_system_prompt_path
     policy_dir = os.path.join(agent_dir, "policies")
 
@@ -560,12 +651,16 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             cwd=project_root,
             check=True,
             capture_output=True,
-            text=True
+            text=True,
         )
-        logger.info(f"Created worktree at {worktree_path} on branch {branch_name} via 'bd worktree'")
+        logger.info(
+            f"Created worktree at {worktree_path} on branch {branch_name} via 'bd worktree'"
+        )
     except subprocess.CalledProcessError as e:
         if "already exists" in e.stderr or "already exists" in e.stdout:
-            logger.info(f"Worktree or branch already exists for {objective_id}. Proceeding.")
+            logger.info(
+                f"Worktree or branch already exists for {objective_id}. Proceeding."
+            )
         else:
             raise RuntimeError(f"Failed to create git worktree: {e.stderr}")
 
@@ -583,11 +678,15 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     telemetry_dir = os.path.join(project_root, ".adjutant", "logs")
     os.makedirs(telemetry_dir, exist_ok=True)
     log_path = os.path.join(telemetry_dir, f"{objective_id}.log")
-    
+
     # Resolve Git metadata for sandboxing
     try:
-        git_common_dir = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=project_root, text=True).strip()
-        git_dir = subprocess.check_output(["git", "rev-parse", "--git-dir"], cwd=worktree_path, text=True).strip()
+        git_common_dir = subprocess.check_output(
+            ["git", "rev-parse", "--git-common-dir"], cwd=project_root, text=True
+        ).strip()
+        git_dir = subprocess.check_output(
+            ["git", "rev-parse", "--git-dir"], cwd=worktree_path, text=True
+        ).strip()
         git_common_dir = os.path.abspath(os.path.join(project_root, git_common_dir))
         git_dir = os.path.abspath(os.path.join(worktree_path, git_dir))
     except Exception:
@@ -597,30 +696,37 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     model = starting_model or "gemini-3.1-pro-preview"
     logger.info(f"--- Spawning sub-agent with model: {model} ---")
     cmd = [
-        "gemini", 
-        "--model", model, 
-        "--policy", policy_dir, 
-        "--include-directories", project_root, 
-        "--include-directories", os.path.join(project_root, ".beads"), 
-        "--include-directories", git_common_dir,
-        "--include-directories", git_dir,
-        "--yolo", 
-        "-p", directive
+        "gemini",
+        "--model",
+        model,
+        "--policy",
+        policy_dir,
+        "--include-directories",
+        project_root,
+        "--include-directories",
+        os.path.join(project_root, ".beads"),
+        "--include-directories",
+        git_common_dir,
+        "--include-directories",
+        git_dir,
+        "--yolo",
+        "-p",
+        directive,
     ]
-    
+
     # Log system prompt and command to the objective's log file
     with open(log_path, "a") as f:
-        f.write(f"\n{'='*80}\n")
+        f.write(f"\n{'=' * 80}\n")
         f.write(f"SCV SPAWN: {datetime.now(timezone.utc).isoformat()}\n")
         f.write(f"AGENT: {agent_name}\n")
         f.write(f"MODEL: {model}\n")
-        f.write(f"{'-'*80}\n")
+        f.write(f"{'-' * 80}\n")
         f.write("SYSTEM PROMPT:\n")
         f.write(prompt)
-        f.write(f"\n{'-'*80}\n")
+        f.write(f"\n{'-' * 80}\n")
         f.write("COMMAND:\n")
         f.write(shlex.join(cmd))
-        f.write(f"\n{'='*80}\n\n")
+        f.write(f"\n{'=' * 80}\n\n")
 
     log_file = open(log_path, "a")
     process = subprocess.Popen(
@@ -629,7 +735,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         stderr=log_file,
         cwd=worktree_path,
         env=env,
-        start_new_session=True
+        start_new_session=True,
     )
     log_file.close()
 
@@ -637,24 +743,34 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     scv_info_path = os.path.join(worktree_path, ".scv_info.json")
     try:
         with open(scv_info_path, "w") as f:
-            json.dump({
-                "pid": process.pid,
-                "agent_name": agent_name,
-                "model": model,
-                "start_time": datetime.now(timezone.utc).isoformat()
-            }, f, indent=2)
+            json.dump(
+                {
+                    "pid": process.pid,
+                    "agent_name": agent_name,
+                    "model": model,
+                    "start_time": datetime.now(timezone.utc).isoformat(),
+                },
+                f,
+                indent=2,
+            )
     except IOError as e:
         logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
 
     logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
 
+
 def show_status():
     """Displays the current status of the Adjutant mission and active SCVs."""
     project_root = get_project_root()
-    
+
     # 1. Mission Progress from 'bd status'
     try:
-        output = subprocess.check_output(["bd", "status", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
+        output = subprocess.check_output(
+            ["bd", "status", "--json"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
         status_data = json.loads(output)
         summary = status_data.get("summary", {})
         total = summary.get("total_issues", 0)
@@ -662,38 +778,45 @@ def show_status():
         closed = summary.get("closed_issues", 0)
         in_progress = summary.get("in_progress_issues", 0)
         blocked = summary.get("blocked_issues", 0)
-        
+
         progress = (closed / total * 100) if total > 0 else 0
         print(f"📊 Adjutant Mission: {progress:.1f}% ({closed}/{total} closed)")
-        print(f"   Status: ○ {open_issues} open | ◐ {in_progress} in progress | ● {blocked} blocked | ✓ {closed} closed")
+        print(
+            f"   Status: ○ {open_issues} open | ◐ {in_progress} in progress | ● {blocked} blocked | ✓ {closed} closed"
+        )
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         print("Could not retrieve mission status summary from bd.")
 
     # 2. Unified Active Objectives and SCVs
     print("\nActive Objectives:")
     registry = get_active_scvs(project_root)
-    
+
     try:
         # Use 'bd list --status in_progress --json' to get active objectives
-        output = subprocess.check_output(["bd", "list", "--status", "in_progress", "--json"], cwd=project_root, text=True, stderr=subprocess.DEVNULL)
+        output = subprocess.check_output(
+            ["bd", "list", "--status", "in_progress", "--json"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
         objectives = json.loads(output)
-        
+
         ip_ids = {obj["id"] for obj in objectives}
         titles = {obj["id"]: obj["title"] for obj in objectives}
         updated_ats = {obj["id"]: obj.get("updated_at") for obj in objectives}
-        
+
         # Combine IDs from bd and running SCVs
         all_ids = sorted(ip_ids | registry.keys())
-        
+
         if not all_ids:
             print("  (None)")
         else:
             for obj_id in all_ids:
                 title = titles.get(obj_id, "Unknown Objective")
-                
+
                 scv_info_str = ""
                 time_info = ""
-                
+
                 # Determine duration from start_time (best) or updated_at (fallback)
                 scv_info = registry.get(obj_id, {})
                 best_ts = scv_info.get("start_time") or updated_ats.get(obj_id)
@@ -702,14 +825,16 @@ def show_status():
                 if obj_id in registry:
                     agent = scv_info.get("agent_name", "???")
                     pid = scv_info.get("pid", "???")
-                    run_suffix = f": {duration}" if duration and duration != "???" else ""
+                    run_suffix = (
+                        f": {duration}" if duration and duration != "???" else ""
+                    )
                     scv_info_str = f" [{agent} | PID: {pid} | Running{run_suffix}]"
                 elif duration and duration != "???":
                     time_info = f" (In progress: {duration})"
-                
+
                 status_icon = "◐" if obj_id in ip_ids else "⚠️"
                 print(f"  {status_icon} {obj_id}: {title}{time_info}{scv_info_str}")
-                
+
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         # Fallback if bd list fails but we have SCV info
         if registry:
@@ -719,15 +844,18 @@ def show_status():
                 start_time = info.get("start_time")
                 duration = format_duration(start_time) if start_time else None
                 run_suffix = f": {duration}" if duration and duration != "???" else ""
-                print(f"  ? {obj_id}: [SCV Running] [{agent} | PID: {pid} | Running{run_suffix}]")
+                print(
+                    f"  ? {obj_id}: [SCV Running] [{agent} | PID: {pid} | Running{run_suffix}]"
+                )
         else:
             print("  (None)")
+
 
 def show_logs(objective_id: Optional[str] = None, follow: bool = False):
     """Shows the logs for a given objective or the main adjutant log."""
     project_root = get_project_root()
     log_dir = os.path.join(project_root, ".adjutant", "logs")
-    
+
     if not objective_id:
         log_path = os.path.join(log_dir, "adjutant.log")
     else:
@@ -739,7 +867,7 @@ def show_logs(objective_id: Optional[str] = None, follow: bool = False):
                 alt_path = os.path.join(log_dir, f"adjutant-{objective_id}.log")
                 if os.path.exists(alt_path):
                     log_path = alt_path
-    
+
     if not os.path.exists(log_path):
         print(f"No logs found at {log_path}")
         return
@@ -747,11 +875,13 @@ def show_logs(objective_id: Optional[str] = None, follow: bool = False):
     if follow:
         try:
             import shutil
+
             # Use tail -f if available, otherwise a simple loop
             if shutil.which("tail"):
                 subprocess.run(["tail", "-f", log_path])
             else:
                 import time
+
                 with open(log_path, "r") as f:
                     # Go to the end of file
                     f.seek(0, os.SEEK_END)

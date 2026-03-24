@@ -3,6 +3,7 @@ import json
 import sys
 import os
 
+
 def get_mission_telemetry():
     """
     Returns a formatted string containing current open objectives and recent activity summary.
@@ -11,7 +12,9 @@ def get_mission_telemetry():
         return ""
     try:
         # Get all issues in one call for better performance and to reduce potential timeout issues
-        output = subprocess.check_output(["bd", "list", "--all", "--json"], stderr=subprocess.DEVNULL, timeout=5.0)
+        output = subprocess.check_output(
+            ["bd", "list", "--all", "--json"], stderr=subprocess.DEVNULL, timeout=5.0
+        )
         all_issues = json.loads(output)
 
         open_objectives = [i for i in all_issues if i.get("status") == "open"]
@@ -24,25 +27,27 @@ def get_mission_telemetry():
         closed_objectives.sort(key=lambda x: x.get("closed_at", ""), reverse=True)
         recent_closed = closed_objectives[:5]
 
-        
         telemetry = "## Mission Telemetry\n\n"
-        
+
         telemetry += "### Active Objectives\n"
         if not all_active:
             telemetry += "- No active objectives.\n"
         for obj in all_active:
-            status_str = f" [{obj.get('status')}]" if obj.get('status') != 'open' else ""
+            status_str = (
+                f" [{obj.get('status')}]" if obj.get("status") != "open" else ""
+            )
             telemetry += f"- {obj.get('id')}: {obj.get('title')}{status_str}\n"
-            
+
         telemetry += "\n### Recent Activity\n"
         if not recent_closed:
             telemetry += "- No recent activity.\n"
         for obj in recent_closed:
             telemetry += f"- COMPLETED: {obj.get('id')}: {obj.get('title')}\n"
-            
+
         return telemetry
     except Exception:
         return "Mission telemetry unavailable"
+
 
 def main():
     """
@@ -62,27 +67,22 @@ def main():
         input_data = sys.stdin.read()
         if input_data:
             json.loads(input_data)
-        
+
         telemetry = get_mission_telemetry()
-        
+
         # Gemini hook protocol response for BeforeAgent
-        output_data = {
-            "hookSpecificOutput": {
-                "additionalContext": telemetry
-            }
-        }
-        
+        output_data = {"hookSpecificOutput": {"additionalContext": telemetry}}
+
         sys.stdout.write(json.dumps(output_data))
         sys.stdout.flush()
     except Exception as e:
         # In case of error, output empty context but don't crash
         output_data = {
-            "hookSpecificOutput": {
-                "additionalContext": f"Telemetry error: {str(e)}"
-            }
+            "hookSpecificOutput": {"additionalContext": f"Telemetry error: {str(e)}"}
         }
         sys.stdout.write(json.dumps(output_data))
         sys.stdout.flush()
+
 
 if __name__ == "__main__":
     main()
