@@ -1,8 +1,7 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import json
 import io
-import sys
 import os
 from adjutant.hooks import get_mission_telemetry, main
 

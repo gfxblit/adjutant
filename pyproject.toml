@@ -15,3 +15,9 @@ adjutant = "adjutant.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["src/tests"]
+asyncio_mode = "strict"
+
