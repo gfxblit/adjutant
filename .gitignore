@@ -15,3 +15,7 @@ src/.adjutant_resolved_system.md
 # Adjutant Parallel SCV Worktrees
 .adjutant/worktrees/
 .scv_info.json
+
+# Coverage and test cache
+.coverage
+.pytest_cache/
