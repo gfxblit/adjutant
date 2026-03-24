@@ -312,20 +312,12 @@ def cleanup_scv(objective_id: str, project_root: str):
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
     worktree_path = os.path.join(worktrees_dir, objective_id)
     branch_name = f"scv/{objective_id}"
-    resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
 
     logger.info(f"\n[Cleaning up SCV for {objective_id}]")
 
     # 1. Check if worktree exists before proceeding
     if not os.path.exists(worktree_path):
         logger.info(f"Worktree for {objective_id} does not exist at {worktree_path}. Skipping cleanup.")
-        # Still attempt to clean up the resolved system prompt if it exists
-        if os.path.exists(resolved_system_prompt_path):
-            try:
-                os.remove(resolved_system_prompt_path)
-                logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
-            except Exception as e:
-                logger.error(f"Failed to remove resolved system prompt: {e}")
         return
 
     # 2. Auto-commit any pending changes in the worktree
@@ -374,15 +366,7 @@ def cleanup_scv(objective_id: str, project_root: str):
         # Catch any other unexpected errors during the git push process.
         logger.error(f"An unexpected error occurred during git push for {branch_name}: {e}")
 
-    # 4. Cleanup resolved system prompt
-    if os.path.exists(resolved_system_prompt_path):
-        try:
-            os.remove(resolved_system_prompt_path)
-            logger.info(f"Removed resolved system prompt: {resolved_system_prompt_path}")
-        except Exception as e:
-            logger.error(f"Failed to remove resolved system prompt: {e}")
-
-    # 5. Remove the worktree
+    # 4. Remove the worktree
     if os.path.exists(worktree_path):
         try:
             # Use --force because we already attempted to commit/push above,
@@ -483,15 +467,8 @@ def run_adjutant_agent(initial_directive: str):
     adjutant_agent_dir = os.path.join(base_dir, "adjutant", "agents", "adjutant")
     system_prompt_path = os.path.join(adjutant_agent_dir, "system.md")
     
-    with open(system_prompt_path, "r") as f:
-        system_prompt = f.read()
-
-    temp_prompt_path = os.path.join(base_dir, ".adjutant_resolved_system.md")
-    with open(temp_prompt_path, "w") as f:
-        f.write(system_prompt)
-    
     env = os.environ.copy()
-    env["GEMINI_SYSTEM_MD"] = temp_prompt_path
+    env["GEMINI_SYSTEM_MD"] = system_prompt_path
     
     policy_dir = os.path.join(adjutant_agent_dir, "policies")
     cmd = ["gemini", "--model", "gemini-3.1-pro-preview", "--policy", policy_dir, "-i", initial_directive]
@@ -513,8 +490,6 @@ def run_adjutant_agent(initial_directive: str):
     finally:
         hud.stop()
         overseer.stop()
-        if os.path.exists(temp_prompt_path):
-            os.remove(temp_prompt_path)
 
 
 def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, directive: str = "Execute mission."):
@@ -535,9 +510,9 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         raise ValueError(f"Unknown agent or missing system prompt: {agent_name}")
 
     with open(system_prompt_path, "r") as f:
-        prompt_template = f.read()
+        system_prompt_content = f.read()
     
-    prompt = prompt_template.format(objective_id=objective_id)
+    initial_prompt = f"Objective ID: {objective_id}\n\n{directive}"
     project_root = get_project_root()
 
     worktrees_dir = os.path.join(project_root, ".adjutant", "worktrees")
@@ -547,11 +522,8 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
 
     env = os.environ.copy()
     env["ADJUTANT_DISABLE_HOOK"] = "1"
-    resolved_system_prompt_path = os.path.join(worktrees_dir, f".resolved_system_{objective_id}.md")
-    with open(resolved_system_prompt_path, "w") as f:
-        f.write(prompt)
     
-    env["GEMINI_SYSTEM_MD"] = resolved_system_prompt_path
+    env["GEMINI_SYSTEM_MD"] = system_prompt_path
     policy_dir = os.path.join(agent_dir, "policies")
 
     try:
@@ -605,7 +577,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         "--include-directories", git_common_dir,
         "--include-directories", git_dir,
         "--yolo", 
-        "-p", directive
+        "-p", initial_prompt
     ]
     
     # Log system prompt and command to the objective's log file
@@ -616,7 +588,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         f.write(f"MODEL: {model}\n")
         f.write(f"{'-'*80}\n")
         f.write("SYSTEM PROMPT:\n")
-        f.write(prompt)
+        f.write(system_prompt_content)
         f.write(f"\n{'-'*80}\n")
         f.write("COMMAND:\n")
         f.write(shlex.join(cmd))
@@ -643,7 +615,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
                 "model": model,
                 "start_time": datetime.now(timezone.utc).isoformat()
             }, f, indent=2)
-    except IOError as e:
+    except Exception as e:
         logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
 
     logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
