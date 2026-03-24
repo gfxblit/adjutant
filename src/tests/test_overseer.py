@@ -40,8 +40,8 @@ class TestSCVOverseer(unittest.TestCase):
 
         self.overseer._check_scvs()
         
-        # Verify spawn_agent called with fallback model
-        mock_spawn.assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview")
+        # Verify spawn_agent called with fallback model and default directive
+        mock_spawn.assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview", directive="Execute mission.")
 
     @patch("adjutant.engine.SCVOverseer._get_registry_from_worktrees")
     @patch("os.path.exists")
@@ -73,8 +73,42 @@ class TestSCVOverseer(unittest.TestCase):
 
         self.overseer._check_scvs()
         
-        # Verify spawn_agent called
-        mock_spawn.assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview")
+        # Verify spawn_agent called with default directive
+        mock_spawn.assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview", directive="Execute mission.")
+
+    @patch("adjutant.engine.SCVOverseer._get_registry_from_worktrees")
+    @patch("os.path.exists")
+    @patch("os.kill")
+    @patch("builtins.open")
+    @patch("adjutant.engine.spawn_agent")
+    def test_overseer_preserves_custom_directive(self, mock_spawn, mock_open_file, mock_kill, mock_exists, mock_get_registry):
+        # Mock registry from worktrees with custom directive
+        registry_data = {
+            "obj-custom": {
+                "pid": 999,
+                "agent_name": "scv-coder",
+                "model": "gemini-3.1-pro-preview",
+                "directive": "Fix the warp drive immediately!"
+            }
+        }
+        mock_get_registry.return_value = registry_data
+        
+        # Mock log file content for crash
+        log_content = "QUOTA_EXHAUSTED"
+        
+        def side_effect(path, mode="r"):
+            if "obj-custom.log" in path:
+                return mock_open(read_data=log_content).return_value
+            return mock_open().return_value
+
+        mock_open_file.side_effect = side_effect
+        mock_exists.side_effect = lambda p: True
+        mock_kill.side_effect = ProcessLookupError() # Process is dead
+
+        self.overseer._check_scvs()
+        
+        # Verify spawn_agent called with CUSTOM directive
+        mock_spawn.assert_called_with("scv-coder", "obj-custom", starting_model="gemini-3-flash-preview", directive="Fix the warp drive immediately!")
 
 class TestSCVOverseerWorktrees(unittest.TestCase):
     def setUp(self):
@@ -150,7 +184,7 @@ class TestSCVOverseerWorktrees(unittest.TestCase):
         self.overseer._check_scvs()
         
         # Verify restart
-        mock_spawn.assert_called_with("scv-coder", "obj-crash", starting_model="gemini-3-flash-preview")
+        mock_spawn.assert_called_with("scv-coder", "obj-crash", starting_model="gemini-3-flash-preview", directive="Execute mission.")
         mock_cleanup.assert_not_called()
 
     @patch("adjutant.engine.SCVOverseer._get_registry_from_worktrees")
