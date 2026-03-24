@@ -63,7 +63,7 @@ def agent_files(mock_fs):
     mock_fs["open"].side_effect = open_side_effect
     return files
 
-def verify_spawn_basics(mock_subp, agent_files, project_root, objective_id, agent_name, isoformat, expected_prompt):
+def verify_spawn_basics(mock_subp, agent_files, project_root, objective_id, agent_name, isoformat, expected_prompt, expected_directive="Execute mission."):
     """Helper to verify the basic actions taken by spawn_agent."""
     # 1. Verify bd update status
     mock_subp["run"].assert_any_call(
@@ -116,6 +116,7 @@ def verify_spawn_basics(mock_subp, agent_files, project_root, objective_id, agen
     info_content = "".join(call[0][0] for call in info_handle.write.call_args_list)
     info_data = json.loads(info_content)
     assert info_data["pid"] == 12345
+    assert info_data["directive"] == expected_directive
     return cmd
 
 def test_spawn_agent_comprehensive(mock_engine_core, agent_files, mock_subp):
@@ -147,7 +148,7 @@ def test_spawn_agent_custom_model_and_directive(mock_engine_core, agent_files, m
 
     cmd = verify_spawn_basics(
         mock_subp, agent_files, project_root, objective_id, agent_name, 
-        mock_engine_core["isoformat"], TESTER_PROMPT
+        mock_engine_core["isoformat"], TESTER_PROMPT, expected_directive=custom_directive
     )
     
     assert "--model" in cmd

@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import json
+import subprocess
 from adjutant.engine import SCVOverseer
 
 @pytest.fixture
@@ -49,8 +50,8 @@ def test_overseer_restarts_on_quota_crash(overseer, mock_overseer_deps):
 
         overseer._check_scvs()
         
-        # Verify spawn_agent called with fallback model
-        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview")
+        # Verify spawn_agent called with fallback model and default directive
+        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview", directive="Execute mission.")
 
 def test_overseer_handles_resource_exhausted(overseer, mock_overseer_deps):
     # Mock registry from worktrees
@@ -78,7 +79,7 @@ def test_overseer_handles_resource_exhausted(overseer, mock_overseer_deps):
 
         overseer._check_scvs()
         
-        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview")
+        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-123", starting_model="gemini-3-flash-preview", directive="Execute mission.")
 
 def test_get_registry_from_worktrees(overseer):
     with patch("os.path.exists", return_value=True), \
@@ -135,7 +136,7 @@ def test_check_scvs_crashed_restart(overseer, mock_overseer_deps):
         
         overseer._check_scvs()
         
-        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-crash", starting_model="gemini-3-flash-preview")
+        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-crash", starting_model="gemini-3-flash-preview", directive="Execute mission.")
         mock_overseer_deps["cleanup"].assert_not_called()
 
 def test_check_scvs_crashed_cleanup(overseer, mock_overseer_deps):
@@ -186,4 +187,65 @@ def test_check_scvs_exhausted_cleanup(overseer, mock_overseer_deps):
         
         overseer._check_scvs()
         
+        mock_overseer_deps["cleanup"].assert_called_with("obj-exhausted", overseer.project_root)
+
+def test_overseer_preserves_custom_directive(overseer, mock_overseer_deps):
+    # Mock registry from worktrees with custom directive
+    registry_data = {
+        "obj-custom": {
+            "pid": 999,
+            "agent_name": "scv-coder",
+            "model": "gemini-3.1-pro-preview",
+            "directive": "Fix the warp drive immediately!"
+        }
+    }
+    with patch.object(overseer, "_get_registry_from_worktrees", return_value=registry_data):
+        # Mock log file content for crash
+        log_content = "QUOTA_EXHAUSTED"
+        
+        def side_effect(path, mode="r"):
+            if "obj-custom.log" in path:
+                m = MagicMock()
+                m.__enter__.return_value = m
+                m.read.return_value = log_content
+                return m
+            return MagicMock()
+
+        mock_overseer_deps["open"].side_effect = side_effect
+        mock_overseer_deps["exists"].return_value = True
+        mock_overseer_deps["kill"].side_effect = ProcessLookupError() # Process is dead
+
+        overseer._check_scvs()
+        
+        # Verify spawn_agent called with CUSTOM directive
+        mock_overseer_deps["spawn"].assert_called_with("scv-coder", "obj-custom", starting_model="gemini-3-flash-preview", directive="Fix the warp drive immediately!")
+
+@patch("subprocess.run")
+def test_check_scvs_exhausted_resets_status(mock_run, overseer, mock_overseer_deps):
+    registry = {
+        "obj-exhausted": {
+            "pid": 777,
+            "agent_name": "scv-coder",
+            "model": overseer.MODELS[-1],
+            "directive": "Do it!"
+        }
+    }
+    with patch.object(overseer, "_get_registry_from_worktrees", return_value=registry):
+        mock_overseer_deps["kill"].side_effect = ProcessLookupError()
+        
+        def open_side_effect(path, mode="r"):
+            m = MagicMock()
+            m.__enter__.return_value = m
+            if "obj-exhausted.log" in path:
+                m.read.return_value = "RESOURCE_EXHAUSTED"
+            return m
+
+        mock_overseer_deps["open"].side_effect = open_side_effect
+        mock_overseer_deps["exists"].return_value = True
+        
+        overseer._check_scvs()
+        
+        # Verify status reset called
+        mock_run.assert_any_call(["bd", "update", "obj-exhausted", "--status", "open"], check=False, capture_output=True)
+        # Verify cleanup still called
         mock_overseer_deps["cleanup"].assert_called_with("obj-exhausted", overseer.project_root)

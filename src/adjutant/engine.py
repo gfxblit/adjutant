@@ -247,6 +247,7 @@ class SCVOverseer:
             pid = scv_info.get("pid")
             agent_name = scv_info.get("agent_name")
             current_model = scv_info.get("model", self.MODELS[0]) # Get model for potential restart
+            directive = scv_info.get("directive", "Execute mission.") # Get original directive
             
             # Check if the process is running. If not, clean it up.
             if pid and not is_process_running(pid):
@@ -271,13 +272,16 @@ class SCVOverseer:
                                     next_model = self.MODELS[current_idx + 1]
                             except ValueError:
                                 next_model = self.MODELS[1] # fallback to flash
-                            
                             if next_model:
                                 logger.info(f"[Overseer] Restarting {objective_id} with model: {next_model}")
-                                spawn_agent(agent_name, objective_id, starting_model=next_model)
+                                spawn_agent(agent_name, objective_id, starting_model=next_model, directive=directive)
                                 continue 
                             else:
-                                logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting.")
+                                logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting. Resetting status to open.")
+                                try:
+                                    subprocess.run(["bd", "update", objective_id, "--status", "open"], check=False, capture_output=True)
+                                except Exception:
+                                    pass
                                 should_restart = False
                     except IOError:
                         logger.warning(f"[Overseer] Could not read log file {log_path} for {objective_id}.")
@@ -614,7 +618,8 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
             json.dump({
                 "pid": process.pid,
                 "agent_name": agent_name,
-                "model": model,
+                "model": model, 
+                "directive": directive,
                 "start_time": datetime.now(timezone.utc).isoformat()
             }, f, indent=2)
     except Exception as e:
