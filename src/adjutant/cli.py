@@ -42,6 +42,9 @@ def main():
     abort_parser = subparsers.add_parser("abort", help="Abort a running SCV")
     abort_parser.add_argument("objective_id", help="Objective ID to abort")
 
+    # tui subcommand
+    subparsers.add_parser("tui", help="Launch the Adjutant TUI Dashboard")
+
     # Handle default 'plan' subcommand for backward compatibility
     # If the first argument is not a known command or help, and there are args, assume 'plan'
     known_commands = list(subparsers.choices.keys()) + ["-h", "--help"]
@@ -72,6 +75,10 @@ def main():
     elif args.command == "status":
         setup_logging(to_stdout=True, log_file=log_path)
         show_status()
+    elif args.command == "tui":
+        from adjutant.tui import run_tui
+        setup_logging(to_stdout=False, log_file=log_path)
+        run_tui()
     elif args.command == "logs":
         setup_logging(to_stdout=True, log_file=log_path)
         show_logs(args.objective_id, follow=args.follow)
