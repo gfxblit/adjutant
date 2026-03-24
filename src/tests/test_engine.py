@@ -116,41 +116,20 @@ class TestRunAdjutantAgent(unittest.TestCase):
     @patch("adjutant.engine.SCVOverseer")
     @patch("adjutant.engine.recover_orphaned_scvs")
     @patch("adjutant.engine.setup_logging")
-    def test_run_adjutant_agent_writes_resolved_prompt(self, mock_setup_logging, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
+    def test_run_adjutant_agent_uses_static_prompt(self, mock_setup_logging, mock_recover, mock_overseer_class, mock_hud_class, mock_remove, mock_exists, mock_run):
         mock_exists.return_value = True
         directive = "Test mission"
         
-        # We need to mock open to return our template and then capture what is written to the resolved file
-        template_content = "System: Content without placeholders"
+        # In the new version, we don't need to mock open for the system prompt
+        # but we still want to ensure setup_logging and recover_orphaned_scvs are called.
+        run_adjutant_agent(directive)
         
-        # Create a mock for the file handle
-        m = mock_open(read_data=template_content)
-        
-        with patch("builtins.open", m):
-            run_adjutant_agent(directive)
-        
-        # The first call to open is for reading the system prompt
-        # The second call is for writing the resolved prompt
-        # (The log file open is avoided because we mock setup_logging)
-        
-        self.assertEqual(m.call_count, 2)
-        
-        # Check path of first open (read)
-        read_path = m.call_args_list[0][0][0]
-        self.assertTrue(read_path.endswith("adjutant/agents/adjutant/system.md"))
-        
-        # Check path of second open (write)
-        write_path = m.call_args_list[1][0][0]
-        self.assertTrue(write_path.endswith(".adjutant_resolved_system.md"))
-        self.assertEqual(m.call_args_list[1][0][1], "w")
-        
-        handle = m()
-        # Find the write() call with the resolved content
-        resolved_content = ""
-        for call in handle.write.call_args_list:
-            resolved_content += call[0][0]
-            
-        self.assertEqual(resolved_content, template_content)
+        # Verify subprocess.run was called with correct environment
+        self.assertTrue(mock_run.called)
+        args, kwargs = mock_run.call_args
+        env = kwargs.get("env")
+        self.assertIsNotNone(env)
+        self.assertTrue(env["GEMINI_SYSTEM_MD"].endswith("adjutant/agents/adjutant/system.md"))
 
 
     @patch("subprocess.run")

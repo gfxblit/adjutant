@@ -13,9 +13,8 @@ class TestSCVMonitoring(unittest.TestCase):
         project_root = "/mock/project"
         objective_id = "test-obj"
         worktree_path = os.path.join(project_root, ".adjutant", "worktrees", objective_id)
-        prompt_path = os.path.join(project_root, ".adjutant", "worktrees", f".resolved_system_{objective_id}.md")
         
-        mock_exists.side_effect = lambda p: p in [worktree_path, prompt_path]
+        mock_exists.side_effect = lambda p: p in [worktree_path]
         
         # Execute
         cleanup_scv(objective_id, project_root)
@@ -28,9 +27,6 @@ class TestSCVMonitoring(unittest.TestCase):
             capture_output=True,
             text=True
         )
-        
-        # Verify prompt removal
-        mock_remove.assert_called_once_with(prompt_path)
 
 if __name__ == "__main__":
     unittest.main()

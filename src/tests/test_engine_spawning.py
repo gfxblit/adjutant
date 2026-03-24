@@ -59,7 +59,8 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run,
     assert "gemini-3.1-pro-preview" in cmd
     assert "--include-directories" in cmd
     assert "-p" in cmd
-    assert "Execute mission." in cmd
+    # Use any() to check for substring since the whole prompt is one string
+    assert any("Execute mission." in arg for arg in cmd)
 
     # Verify cwd is set to worktree
     assert kwargs.get("cwd", "").endswith(f"worktrees/{objective_id}")
@@ -154,7 +155,7 @@ def test_spawn_agent_logs_prompt_and_command(mock_exists, mock_makedirs, mock_po
     assert "SCV SPAWN:" in full_content
     assert f"AGENT: {agent_name}" in full_content
     assert "SYSTEM PROMPT:" in full_content
-    assert f"Coder Prompt for {objective_id}" in full_content
+    assert system_prompt_content in full_content
     assert "COMMAND:" in full_content
     assert "gemini" in full_content
     assert "--model" in full_content
