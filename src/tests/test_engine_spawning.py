@@ -96,6 +96,15 @@ def test_spawn_agent_comprehensive(mock_datetime, mock_timezone, mock_get_root, 
     cmd = args[0]
     assert cmd[0] == "gemini"
     assert kwargs["cwd"] == worktree_path
+    assert "-p" in cmd
+    prompt_idx = cmd.index("-p") + 1
+    assert f"Objective ID: {objective_id}" in cmd[prompt_idx]
+    assert "Execute mission." in cmd[prompt_idx]
+    
+    log_path = os.path.join(project_root, ".adjutant", "logs", f"{objective_id}.log")
+    log_handle = files[log_path]
+    assert kwargs["stdout"] == log_handle
+    assert kwargs["stderr"] == log_handle
 
     # 6. Verify .scv_info.json writing
     scv_info_path = os.path.join(worktree_path, ".scv_info.json")
@@ -137,10 +146,15 @@ def test_spawn_agent_custom_model_and_directive(mock_datetime, mock_timezone, mo
     cmd = args[0]
     assert "--model" in cmd
     assert custom_model in cmd
-    assert custom_directive in cmd[-1]
-
-    # Verify log content
+    assert "-p" in cmd
+    prompt_idx = cmd.index("-p") + 1
+    assert f"Objective ID: {objective_id}" in cmd[prompt_idx]
+    assert custom_directive in cmd[prompt_idx]
+    
     log_path = os.path.join("/root", ".adjutant", "logs", f"{objective_id}.log")
+    log_handle = files[log_path]
+    assert kwargs["stdout"] == log_handle
+    assert kwargs["stderr"] == log_handle
     log_handle = files[log_path]
     all_writes = "".join(call[0][0] for call in log_handle.write.call_args_list)
     assert f"MODEL: {custom_model}" in all_writes
