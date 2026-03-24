@@ -24,6 +24,48 @@ def get_mission_telemetry():
         closed_objectives.sort(key=lambda x: x.get("closed_at", ""), reverse=True)
         recent_closed = closed_objectives[:5]
 
+        # PR Tracking Logic
+        pr_info = {} # dict mapping objective id to list of PR statuses
+        if all_active:
+            try:
+                import re
+                url_pattern = re.compile(r'https://github\.com/[^\s/]+/[^\s/]+/pull/\d+')
+                active_ids = [obj.get("id") for obj in all_active if obj.get("id")]
+                
+                show_output = subprocess.check_output(
+                    ["bd", "show", "--json"] + active_ids,
+                    stderr=subprocess.DEVNULL, timeout=5.0
+                )
+                show_details = json.loads(show_output)
+                if not isinstance(show_details, list):
+                    show_details = [show_details]
+                
+                urls_to_ids = {} # map url -> set of objective ids
+                for detail in show_details:
+                    obj_id = detail.get("id")
+                    for comment in detail.get("comments", []):
+                        body = comment.get("text", "")
+                        found_urls = url_pattern.findall(body)
+                        for url in found_urls:
+                            urls_to_ids.setdefault(url, set()).add(obj_id)
+                
+                if urls_to_ids:
+                    gh_output = subprocess.check_output(
+                        ["gh", "pr", "list", "--state", "all", "--json", "url,state,number"],
+                        stderr=subprocess.DEVNULL, timeout=5.0
+                    )
+                    gh_prs = json.loads(gh_output)
+                    url_to_gh_pr = {pr["url"]: pr for pr in gh_prs}
+                    
+                    for url, ids in urls_to_ids.items():
+                        if url in url_to_gh_pr:
+                            pr_data = url_to_gh_pr[url]
+                            status_str = f"PR #{pr_data['number']} {pr_data['state']}"
+                            for obj_id in ids:
+                                pr_info.setdefault(obj_id, []).append(status_str)
+            except Exception:
+                # Silently ignore errors in PR tracking
+                pass
         
         telemetry = "## Mission Telemetry\n\n"
         
@@ -32,7 +74,13 @@ def get_mission_telemetry():
             telemetry += "- No active objectives.\n"
         for obj in all_active:
             status_str = f" [{obj.get('status')}]" if obj.get('status') != 'open' else ""
-            telemetry += f"- {obj.get('id')}: {obj.get('title')}{status_str}\n"
+            
+            obj_id = obj.get("id")
+            if obj_id in pr_info and pr_info[obj_id]:
+                pr_str = ", ".join(pr_info[obj_id])
+                status_str += f" [{pr_str}]"
+                
+            telemetry += f"- {obj_id}: {obj.get('title')}{status_str}\n"
             
         telemetry += "\n### Recent Activity\n"
         if not recent_closed:
