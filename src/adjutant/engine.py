@@ -494,8 +494,22 @@ def run_adjutant_agent(initial_directive: str):
     env["GEMINI_SYSTEM_MD"] = temp_prompt_path
     
     policy_dir = os.path.join(adjutant_agent_dir, "policies")
-    cmd = ["gemini", "--model", "gemini-3.1-pro-preview", "--policy", policy_dir, "-i", initial_directive]
+    model = "gemini-3.1-pro-preview"
+    cmd = ["gemini", "--model", model, "--policy", policy_dir, "-i", initial_directive]
     
+    # Log system prompt and command to adjutant.log
+    with open(log_path, "a") as f:
+        f.write(f"\n{'='*80}\n")
+        f.write(f"ADJUTANT START: {datetime.now(timezone.utc).isoformat()}\n")
+        f.write(f"MODEL: {model}\n")
+        f.write(f"{'-'*80}\n")
+        f.write("SYSTEM PROMPT:\n")
+        f.write(system_prompt)
+        f.write(f"\n{'-'*80}\n")
+        f.write("COMMAND:\n")
+        f.write(shlex.join(cmd))
+        f.write(f"\n{'='*80}\n\n")
+
     hud = AdjutantHUD(mission=initial_directive)
     hud.start()
 
