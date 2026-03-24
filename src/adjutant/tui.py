@@ -1,5 +1,6 @@
 import json
 import subprocess
+from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, DataTable
 from textual.containers import Container
@@ -20,12 +21,30 @@ class MissionSummary(Static):
         open_ = s.get("open_issues", 0)
         closed = s.get("closed_issues", 0)
         in_progress = s.get("in_progress_issues", 0)
+        ready = s.get("ready_issues", 0)
+        blocked = s.get("blocked_issues", 0)
         
         progress = (closed / total * 100) if total > 0 else 0
         
-        return f"""[b]Mission Summary[/b]
-Progress: {progress:.1f}% ({closed}/{total})
-Open: {open_} | In Progress: {in_progress}"""
+        # Simple progress bar
+        bar_width = 30
+        filled_width = int(progress / 100 * bar_width)
+        bar = "█" * filled_width + "░" * (bar_width - filled_width)
+        
+        counts = [
+            f"[yellow]Open: {open_}[/]",
+            f"[blue]In Progress: {in_progress}[/]",
+            f"[green]Ready: {ready}[/]",
+            f"[white]Closed: {closed}[/]"
+        ]
+        if blocked > 0:
+            counts.append(f"[red]Blocked: {blocked}[/]")
+            
+        return (
+            f"[b]Mission Summary[/b]\n"
+            f"Progress: |{bar}| {progress:.1f}% ({closed}/{total})\n"
+            f"{' | '.join(counts)}"
+        )
 
 
 class SCVTable(DataTable):
@@ -40,7 +59,7 @@ class AdjutantDashboard(App):
         layout: vertical;
     }
     #summary-container {
-        height: 6;
+        height: auto;
         padding: 1;
         background: $panel;
         margin: 1;
@@ -51,6 +70,9 @@ class AdjutantDashboard(App):
         padding: 1;
         margin: 1;
         border: solid $secondary;
+    }
+    DataTable {
+        height: 1fr;
     }
     """
     
@@ -84,7 +106,7 @@ class AdjutantDashboard(App):
                 cwd=root,
                 stderr=subprocess.DEVNULL, 
                 text=True,
-                timeout=2.0
+                timeout=3.0
             )
             status_data = json.loads(output)
             summary_data = status_data.get("summary", {})
@@ -110,6 +132,10 @@ class AdjutantDashboard(App):
             model = info.get("model", "unknown")
             duration = format_duration(info.get("start_time"))
             table.add_row(objective_id, agent, pid, model, duration)
+        
+        # Update status bar with last refresh time
+        now = datetime.now().strftime("%H:%M:%S")
+        self.sub_title = f"Last Refresh: {now}"
 
 def run_tui():
     app = AdjutantDashboard()
