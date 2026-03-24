@@ -1,8 +1,7 @@
 from unittest.mock import patch, mock_open, MagicMock
-from adjutant.engine import spawn_agent, get_project_root
+from adjutant.engine import spawn_agent
 import pytest
 import os
-import json
 
 @patch("adjutant.engine.get_project_root")
 @patch("subprocess.run")
@@ -127,7 +126,8 @@ def test_spawn_agent_scv_tester(mock_exists, mock_makedirs, mock_popen, mock_run
 @patch("subprocess.Popen")
 @patch("os.makedirs")
 @patch("os.path.exists")
-def test_spawn_agent_logs_prompt_and_command(mock_exists, mock_makedirs, mock_popen, mock_run, mock_get_root):
+@patch("adjutant.engine.datetime")
+def test_spawn_agent_logs_prompt_and_command(mock_datetime, mock_exists, mock_makedirs, mock_popen, mock_run, mock_get_root):
     # Setup
     agent_name = "scv-coder"
     objective_id = "test-obj-logs"
@@ -136,6 +136,13 @@ def test_spawn_agent_logs_prompt_and_command(mock_exists, mock_makedirs, mock_po
     mock_exists.return_value = True
     mock_popen.return_value.pid = 999
     
+    # Mock datetime to have a fixed timestamp
+    fixed_now = MagicMock()
+    fixed_now.isoformat.return_value = "2026-03-24T12:00:00+00:00"
+    mock_datetime.now.return_value = fixed_now
+    mock_datetime.timezone = MagicMock()
+    mock_datetime.timezone.utc = MagicMock()
+
     system_prompt_content = "Coder Prompt for {objective_id}"
     m = mock_open(read_data=system_prompt_content)
     
@@ -143,24 +150,58 @@ def test_spawn_agent_logs_prompt_and_command(mock_exists, mock_makedirs, mock_po
         # Execute
         spawn_agent(agent_name, objective_id)
     
-    # Verify that the log file was opened for appending
-    log_path = os.path.join(project_root, ".adjutant", "logs", f"{objective_id}.log")
+    # Verify content written to log file
+    handle = m()
+    all_writes = [call[0][0] for call in handle.write.call_args_list]
+    full_content = "".join(all_writes)
+    
+    assert "================================================================================" in full_content
+    assert "SCV SPAWN: 2026-03-24T12:00:00+00:00" in full_content
+    assert f"AGENT: {agent_name}" in full_content
+    assert "MODEL: gemini-3.1-pro-preview" in full_content
+    assert "--------------------------------------------------------------------------------" in full_content
+    assert "SYSTEM PROMPT:" in full_content
+    assert f"Coder Prompt for {objective_id}" in full_content
+    assert "COMMAND:" in full_content
+    assert "gemini" in full_content
+    assert "--model gemini-3.1-pro-preview" in full_content
+    assert "--yolo" in full_content
+    assert "-p 'Execute mission.'" in full_content
+    assert "--policy" in full_content
+
+@patch("adjutant.engine.get_project_root")
+@patch("subprocess.run")
+@patch("subprocess.Popen")
+@patch("os.makedirs")
+@patch("os.path.exists")
+def test_spawn_agent_logs_custom_model_and_directive(mock_exists, mock_makedirs, mock_popen, mock_run, mock_get_root):
+    # Setup
+    agent_name = "scv-coder"
+    objective_id = "test-obj-custom"
+    project_root = "/mock/project"
+    mock_get_root.return_value = project_root
+    mock_exists.return_value = True
+    mock_popen.return_value.pid = 999
+    
+    custom_model = "gemini-3-flash-preview"
+    custom_directive = "Build a rocket ship."
+    
+    system_prompt_content = "Coder Prompt for {objective_id}"
+    m = mock_open(read_data=system_prompt_content)
+    
+    with patch("builtins.open", m):
+        # Execute
+        spawn_agent(agent_name, objective_id, starting_model=custom_model, directive=custom_directive)
     
     # Verify content written to log file
     handle = m()
     all_writes = [call[0][0] for call in handle.write.call_args_list]
     full_content = "".join(all_writes)
     
-    assert "SCV SPAWN:" in full_content
     assert f"AGENT: {agent_name}" in full_content
-    assert "SYSTEM PROMPT:" in full_content
-    assert f"Coder Prompt for {objective_id}" in full_content
-    assert "COMMAND:" in full_content
-    assert "gemini" in full_content
-    assert "--model" in full_content
-    assert "--yolo" in full_content
-    assert "-p 'Execute mission.'" in full_content
-    assert "--policy" in full_content
+    assert f"MODEL: {custom_model}" in full_content
+    assert f"--model {custom_model}" in full_content
+    assert f"-p '{custom_directive}'" in full_content
 
 def test_spawn_agent_invalid_name():
     with pytest.raises(ValueError, match="Unknown agent or missing system prompt: invalid-agent"):
