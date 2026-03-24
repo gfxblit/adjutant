@@ -60,6 +60,46 @@ class TestHooks(unittest.TestCase):
         }
         self.assertEqual(output_data, expected_output)
 
+    @patch("subprocess.check_output")
+    def test_get_mission_telemetry_with_prs(self, mock_check_output):
+        # Mocking the sequence of subprocess calls
+        # 1. bd list --all --json
+        # 2. bd show --json obj-1
+        # 3. gh pr list --state all --json url,state,number
+        
+        all_issues = [
+            {"id": "obj-1", "title": "In progress task", "status": "in_progress"},
+        ]
+        
+        show_details = [{
+            "id": "obj-1",
+            "comments": [
+                {"text": "Working on https://github.com/owner/repo/pull/123"}
+            ]
+        }]
+        
+        gh_prs = [{
+            "url": "https://github.com/owner/repo/pull/123",
+            "state": "OPEN",
+            "number": 123
+        }]
+        
+        mock_check_output.side_effect = [
+            json.dumps(all_issues).encode(),
+            json.dumps(show_details).encode(),
+            json.dumps(gh_prs).encode()
+        ]
+        
+        telemetry = get_mission_telemetry()
+        
+        self.assertIn("- obj-1: In progress task [in_progress] [PR #123 OPEN]", telemetry)
+        
+        # Verify calls
+        calls = mock_check_output.call_args_list
+        self.assertEqual(calls[0][0][0], ["bd", "list", "--all", "--json"])
+        self.assertEqual(calls[1][0][0], ["bd", "show", "--json", "obj-1"])
+        self.assertEqual(calls[2][0][0], ["gh", "pr", "list", "--state", "all", "--json", "url,state,number"])
+
     @patch("os.environ.get")
     @patch("sys.stdout", new_callable=io.StringIO)
     def test_cli_hook_protocol_disabled(self, mock_stdout, mock_environ_get):
