@@ -410,10 +410,12 @@ def abort_scv(objective_id: str):
 
     # Mark the objective as open in bd to allow restart
     try:
-        subprocess.run(["bd", "update", objective_id, "--status", "open"], check=False)
+        subprocess.run(["bd", "update", objective_id, "--status", "open"], check=False, capture_output=True)
         logger.info(f"Reset objective {objective_id} status to 'open'.")
     except Exception:
         pass
+
+
 
     # Run cleanup (which commits, pushes, and removes worktree)
     cleanup_scv(objective_id, project_root)
@@ -498,7 +500,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     """
     # Mark the objective as in_progress in bd
     try:
-        subprocess.run(["bd", "update", objective_id, "--status", "in_progress"], check=False, stderr=subprocess.DEVNULL)
+        subprocess.run(["bd", "update", objective_id, "--status", "in_progress"], check=False, capture_output=True)
     except Exception:
         pass
 
