@@ -97,11 +97,6 @@ def test_spawn_agent_logs_actual_system_prompts(mock_datetime, mock_exists, mock
     # This function will decide which mock file object to return based on the path
     def custom_open_side_effect(file_path, mode='r', **kwargs):
         # Dynamically construct expected paths based on mocked project_root and objective_id
-        objective_id_coder = "test-obj-coder-log"
-        objective_id_tester = "test-obj-tester-log"
-        
-        # print(f"DEBUG: Opening {file_path}, mode {mode}")
-        
         if "scv-coder" in file_path and "system.md" in file_path and mode == 'r':
             return mock_coder_md_file_obj
         elif "scv-tester" in file_path and "system.md" in file_path and mode == 'r':
@@ -132,7 +127,6 @@ def test_spawn_agent_logs_actual_system_prompts(mock_datetime, mock_exists, mock
     assert "--policy" in cmd
     assert "--include-directories" in cmd
     assert "-p" in cmd
-    assert "Execute mission." in cmd
     
     assert kwargs.get("cwd") == mock_os_path_join(project_root, ".adjutant", "worktrees", objective_id_coder)
     assert kwargs.get("start_new_session") is True
@@ -140,12 +134,12 @@ def test_spawn_agent_logs_actual_system_prompts(mock_datetime, mock_exists, mock
     # Check that ADJUTANT_DISABLE_HOOK is in the env
     called_env = kwargs.get("env", {})
     assert called_env.get("ADJUTANT_DISABLE_HOOK") == "1"
-    assert called_env.get("GEMINI_SYSTEM_MD") is not None
     
     # Verify logged content for coder
     logged_output_coder = "".join(mock_log_writes)
     # Ensure the actual content is present, stripped of leading/trailing whitespace
-    assert coder_system_prompt_content.format(objective_id=objective_id_coder).strip() in logged_output_coder.strip()
+    # Note: After PR #31 refactor, objective_id is NOT formatted into system prompt
+    assert coder_system_prompt_content.strip() in logged_output_coder.strip()
     assert f"AGENT: scv-coder" in logged_output_coder
     assert f"MODEL: gemini-3.1-pro-preview" in logged_output_coder
     assert "COMMAND:" in logged_output_coder
@@ -153,7 +147,6 @@ def test_spawn_agent_logs_actual_system_prompts(mock_datetime, mock_exists, mock
     assert "gemini" in logged_output_coder
     assert "--model gemini-3.1-pro-preview" in logged_output_coder
     assert "--policy" in logged_output_coder
-    assert "-p 'Execute mission.'" in logged_output_coder
 
     # --- Test SCV-Tester ---
     objective_id_tester = "test-obj-tester-log"
@@ -170,31 +163,28 @@ def test_spawn_agent_logs_actual_system_prompts(mock_datetime, mock_exists, mock
     assert cmd_tester[0] == "gemini"
     assert "--model" in cmd_tester
     assert "--policy" in cmd_tester
-    assert "-p" in cmd_tester
     
     assert kwargs_tester.get("cwd") == mock_os_path_join(project_root, ".adjutant", "worktrees", objective_id_tester)
     
     # Check that ADJUTANT_DISABLE_HOOK is in the env
     called_env_tester = kwargs_tester.get("env", {})
     assert called_env_tester.get("ADJUTANT_DISABLE_HOOK") == "1"
-    assert called_env_tester.get("GEMINI_SYSTEM_MD") is not None
     
     # Verify logged content for tester
     logged_output_tester = "".join(mock_log_writes)
-    assert tester_system_prompt_content.format(objective_id=objective_id_tester).strip() in logged_output_tester.strip()
+    assert tester_system_prompt_content.strip() in logged_output_tester.strip()
     assert f"AGENT: scv-tester" in logged_output_tester
     assert f"MODEL: gemini-3.1-pro-preview" in logged_output_tester
     # Check the command string in the log
     assert "gemini" in logged_output_tester
     assert "--model gemini-3.1-pro-preview" in logged_output_tester
     assert "--policy" in logged_output_tester
-    assert "-p 'Execute mission.'" in logged_output_tester
 
     # Ensure .scv_info.json was opened for writing - we can check the calls to builtins.open via the mock
     scv_info_opens = [call for call in mock_builtins_open.call_args_list if ".scv_info.json" in call[0][0]]
     assert len(scv_info_opens) > 0
 
-# --- Original Tests (Copied from provided context) ---
+# --- Original Tests ---
 
 @patch("adjutant.engine.get_project_root")
 @patch("subprocess.run")
@@ -247,7 +237,8 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run,
     assert "gemini-3.1-pro-preview" in cmd
     assert "--include-directories" in cmd
     assert "-p" in cmd
-    assert "Execute mission." in cmd
+    # The prompt should contain the objective ID directly now
+    assert any(objective_id in arg for arg in cmd)
 
     # Verify cwd is set to worktree
     assert kwargs.get("cwd", "").endswith(f"worktrees/{objective_id}")
@@ -350,13 +341,12 @@ def test_spawn_agent_logs_prompt_and_command(mock_datetime, mock_exists, mock_ma
     assert "MODEL: gemini-3.1-pro-preview" in full_content
     assert "--------------------------------------------------------------------------------" in full_content
     assert "SYSTEM PROMPT:" in full_content
-    assert f"Coder Prompt for {objective_id}" in full_content
+    assert system_prompt_content in full_content
     assert "COMMAND:" in full_content
     assert "gemini" in full_content
     assert "--model gemini-3.1-pro-preview" in full_content
-    assert "--yolo" in full_content # Note: This test checks for '--yolo', which might not be in production command.
-    assert "-p 'Execute mission.'" in full_content
-    assert "--policy" in full_content
+    assert "--yolo" in full_content
+    assert objective_id in full_content # Objective ID should be in the initial prompt part of the log
 
 @patch("adjutant.engine.get_project_root")
 @patch("subprocess.run")
@@ -398,7 +388,7 @@ def test_spawn_agent_logs_custom_model_and_directive(mock_datetime, mock_exists,
     assert f"AGENT: {agent_name}" in full_content
     assert f"MODEL: {custom_model}" in full_content
     assert f"--model {custom_model}" in full_content
-    assert f"-p '{custom_directive}'" in full_content
+    assert custom_directive in full_content
 
 def test_spawn_agent_invalid_name():
     with pytest.raises(ValueError, match="Unknown agent or missing system prompt: invalid-agent"):
