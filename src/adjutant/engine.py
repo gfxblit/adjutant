@@ -247,6 +247,7 @@ class SCVOverseer:
             pid = scv_info.get("pid")
             agent_name = scv_info.get("agent_name")
             current_model = scv_info.get("model", self.MODELS[0]) # Get model for potential restart
+            directive = scv_info.get("directive", "Execute mission.") # Get original directive
             
             # Check if the process is running. If not, clean it up.
             if pid and not is_process_running(pid):
@@ -274,7 +275,7 @@ class SCVOverseer:
                             
                             if next_model:
                                 logger.info(f"[Overseer] Restarting {objective_id} with model: {next_model}")
-                                spawn_agent(agent_name, objective_id, starting_model=next_model)
+                                spawn_agent(agent_name, objective_id, starting_model=next_model, directive=directive)
                                 continue 
                             else:
                                 logger.warning(f"[Overseer] All fallback models exhausted for {objective_id}. Not restarting.")
@@ -615,6 +616,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
                 "pid": process.pid,
                 "agent_name": agent_name,
                 "model": model,
+                "directive": directive,
                 "start_time": datetime.now(timezone.utc).isoformat()
             }, f, indent=2)
     except Exception as e:

@@ -273,6 +273,7 @@ def test_spawn_agent_scv_coder(mock_exists, mock_makedirs, mock_popen, mock_run,
     assert '"pid": 12345' in full_content
     assert f'"agent_name": "{agent_name}"' in full_content
     assert '"model": "gemini-3.1-pro-preview"' in full_content
+    assert '"directive": "Execute mission."' in full_content
 
 @patch("adjutant.engine.get_project_root")
 @patch("subprocess.run")
