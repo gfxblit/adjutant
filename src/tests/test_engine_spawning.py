@@ -63,6 +63,12 @@ def agent_files(mock_fs):
     mock_fs["open"].side_effect = open_side_effect
     return files
 
+@pytest.fixture(autouse=True)
+def mock_env():
+    """Ensure TMUX is not in the environment during tests unless specifically tested."""
+    with patch.dict(os.environ, {}, clear=True):
+        yield
+
 def verify_spawn_basics(mock_subp, agent_files, project_root, objective_id, agent_name, isoformat, expected_prompt, expected_directive="Execute mission."):
     """Helper to verify the basic actions taken by spawn_agent."""
     # 1. Verify bd update status
@@ -100,14 +106,17 @@ def verify_spawn_basics(mock_subp, agent_files, project_root, objective_id, agen
     mock_subp["popen"].assert_called_once()
     args, kwargs = mock_subp["popen"].call_args
     cmd = args[0]
-    assert cmd[0] == "gemini"
+    assert cmd[0] == "bash"
+    assert cmd[1] == "-c"
+    bash_cmd = cmd[2]
+    assert "gemini" in bash_cmd
+    assert "--yolo" in bash_cmd
+    assert "--include-directories" in bash_cmd
+    assert project_root in bash_cmd
+    assert "-p" in bash_cmd
+    assert "tee -a" in bash_cmd
     assert kwargs["cwd"] == worktree_path
-    assert "--yolo" in cmd
-    assert "--include-directories" in cmd
-    assert project_root in cmd
-    assert "-p" in cmd
-    assert kwargs["stdout"] == log_handle
-    assert kwargs["stderr"] == log_handle
+    assert kwargs["start_new_session"] is True
 
     # 6. Verify .scv_info.json writing
     scv_info_path = os.path.join(worktree_path, ".scv_info.json")
@@ -117,7 +126,7 @@ def verify_spawn_basics(mock_subp, agent_files, project_root, objective_id, agen
     info_data = json.loads(info_content)
     assert info_data["pid"] == 12345
     assert info_data["directive"] == expected_directive
-    return cmd
+    return bash_cmd
 
 def test_spawn_agent_comprehensive(mock_engine_core, agent_files, mock_subp):
     agent_name = "scv-coder"
@@ -127,14 +136,13 @@ def test_spawn_agent_comprehensive(mock_engine_core, agent_files, mock_subp):
     # Execute
     spawn_agent(agent_name, objective_id)
 
-    cmd = verify_spawn_basics(
+    bash_cmd = verify_spawn_basics(
         mock_subp, agent_files, project_root, objective_id, agent_name, 
         mock_engine_core["isoformat"], CODER_PROMPT
     )
     
-    prompt_idx = cmd.index("-p") + 1
-    assert f"Objective ID: {objective_id}" in cmd[prompt_idx]
-    assert "Execute mission." in cmd[prompt_idx]
+    assert f"Objective ID: {objective_id}" in bash_cmd
+    assert "Execute mission." in bash_cmd
 
 def test_spawn_agent_custom_model_and_directive(mock_engine_core, agent_files, mock_subp):
     agent_name = "scv-tester"
@@ -146,18 +154,36 @@ def test_spawn_agent_custom_model_and_directive(mock_engine_core, agent_files, m
     # Execute
     spawn_agent(agent_name, objective_id, starting_model=custom_model, directive=custom_directive)
 
-    cmd = verify_spawn_basics(
+    bash_cmd = verify_spawn_basics(
         mock_subp, agent_files, project_root, objective_id, agent_name, 
         mock_engine_core["isoformat"], TESTER_PROMPT, expected_directive=custom_directive
     )
     
-    assert "--model" in cmd
-    assert custom_model in cmd
-    prompt_idx = cmd.index("-p") + 1
-    assert f"Objective ID: {objective_id}" in cmd[prompt_idx]
-    assert custom_directive in cmd[prompt_idx]
+    assert "--model" in bash_cmd
+    assert custom_model in bash_cmd
+    assert f"Objective ID: {objective_id}" in bash_cmd
+    assert custom_directive in bash_cmd
 
 def test_spawn_agent_invalid_name(mock_fs):
     mock_fs["exists"].return_value = False
     with pytest.raises(ValueError, match="Unknown agent or missing system prompt: invalid-agent"):
         spawn_agent("invalid-agent", "some-id")
+
+def test_spawn_agent_tmux(mock_engine_core, agent_files, mock_subp):
+    with patch.dict(os.environ, {"TMUX": "1"}):
+        mock_subp["check_output"].return_value = "9999\n"
+        spawn_agent("scv-coder", "test-obj-tmux")
+        
+        mock_subp["check_output"].assert_called()
+        args, kwargs = mock_subp["check_output"].call_args
+        tmux_cmd = args[0]
+        assert tmux_cmd[0] == "tmux"
+        assert tmux_cmd[1] == "new-window"
+        assert kwargs.get("text") is True
+        
+        # Verify JSON info
+        worktree_path = os.path.join(mock_engine_core["root"], ".adjutant", "worktrees", "test-obj-tmux")
+        scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+        info_content = "".join(call[0][0] for call in agent_files[scv_info_path].write.call_args_list)
+        info_data = json.loads(info_content)
+        assert info_data["pid"] == 9999

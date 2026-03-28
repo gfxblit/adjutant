@@ -587,6 +587,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     ]
     
     # Log system prompt and command to the objective's log file
+    cmd_str = shlex.join(cmd)
     with open(log_path, "a") as f:
         f.write(f"\n{'='*80}\n")
         f.write(f"SCV SPAWN: {datetime.now(timezone.utc).isoformat()}\n")
@@ -597,35 +598,68 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         f.write(system_prompt_content)
         f.write(f"\n{'-'*80}\n")
         f.write("COMMAND:\n")
-        f.write(shlex.join(cmd))
+        f.write(cmd_str)
         f.write(f"\n{'='*80}\n\n")
 
-    log_file = open(log_path, "a")
-    process = subprocess.Popen(
-        cmd,
-        stdout=log_file,
-        stderr=log_file,
-        cwd=worktree_path,
-        env=env,
-        start_new_session=True
-    )
-    log_file.close()
-
-    # Write worktree-local SCV info
+    bash_cmd = f"{cmd_str} 2>&1 | tee -a {shlex.quote(log_path)}"
     scv_info_path = os.path.join(worktree_path, ".scv_info.json")
-    try:
-        with open(scv_info_path, "w") as f:
-            json.dump({
-                "pid": process.pid,
-                "agent_name": agent_name,
-                "model": model, 
-                "directive": directive,
-                "start_time": datetime.now(timezone.utc).isoformat()
-            }, f, indent=2)
-    except Exception as e:
-        logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
 
-    logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
+    if "TMUX" in os.environ:
+        tmux_cmd = [
+            "tmux", "new-window", "-P", "-d", "-n", branch_name, "-c", worktree_path,
+            "-e", f"GEMINI_SYSTEM_MD={system_prompt_path}",
+            "-e", "ADJUTANT_DISABLE_HOOK=1",
+            "-F", "#{pane_pid}",
+            "bash", "-c", bash_cmd
+        ]
+        try:
+            output = subprocess.check_output(tmux_cmd, text=True).strip()
+            pid = int(output.split('\n')[-1]) if output.split('\n')[-1].isdigit() else 0
+            logger.info(f"Spawned SCV in tmux window '{branch_name}' (PID: {pid})")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to spawn in tmux: {e}")
+            raise RuntimeError(f"Tmux spawning failed: {e}")
+            
+        try:
+            with open(scv_info_path, "w") as f:
+                json.dump({
+                    "pid": pid,
+                    "agent_name": agent_name,
+                    "model": model,
+                    "directive": directive,
+                    "start_time": datetime.now(timezone.utc).isoformat()
+                }, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
+            
+    else:
+        logger.info("Spawning SCV in foreground...")
+        process = subprocess.Popen(
+            ["bash", "-c", bash_cmd],
+            cwd=worktree_path,
+            env=env,
+            start_new_session=True
+        )
+        
+        try:
+            with open(scv_info_path, "w") as f:
+                json.dump({
+                    "pid": process.pid,
+                    "agent_name": agent_name,
+                    "model": model,
+                    "directive": directive,
+                    "start_time": datetime.now(timezone.utc).isoformat()
+                }, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
+            
+        try:
+            process.wait()
+        except KeyboardInterrupt:
+            logger.info("\nCtrl+C received. Aborting SCV...")
+            from adjutant.engine import abort_scv
+            abort_scv(objective_id)
+            sys.exit(1)
 
 def show_status():
     """Displays the current status of the Adjutant mission and active SCVs."""
