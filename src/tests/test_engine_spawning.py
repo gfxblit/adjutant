@@ -30,6 +30,9 @@ def mock_subp():
 @pytest.fixture
 def mock_engine_core():
     """Provides a consistent way to mock engine's core dependencies."""
+    if "TMUX" in os.environ:
+        os.environ.pop("TMUX")
+        
     with patch("adjutant.engine.get_project_root") as m_get_root, \
          patch("adjutant.engine.timezone") as m_timezone, \
          patch("adjutant.engine.datetime") as m_datetime:

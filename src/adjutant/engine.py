@@ -574,6 +574,14 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
 
     model = starting_model or "gemini-3.1-pro-preview"
     logger.info(f"--- Spawning sub-agent with model: {model} ---")
+    
+    in_tmux = "TMUX" in os.environ
+    if in_tmux:
+        # When running inside a tmux session, we want it interactive and in a new window
+        cmd_flag = "-i"
+    else:
+        cmd_flag = "-p"
+
     cmd = [
         "gemini", 
         "--model", model, 
@@ -583,7 +591,7 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         "--include-directories", git_common_dir,
         "--include-directories", git_dir,
         "--yolo", 
-        "-p", initial_prompt
+        cmd_flag, initial_prompt
     ]
     
     # Log system prompt and command to the objective's log file
@@ -600,32 +608,63 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
         f.write(shlex.join(cmd))
         f.write(f"\n{'='*80}\n\n")
 
-    log_file = open(log_path, "a")
-    process = subprocess.Popen(
-        cmd,
-        stdout=log_file,
-        stderr=log_file,
-        cwd=worktree_path,
-        env=env,
-        start_new_session=True
-    )
-    log_file.close()
+    process_pid = None
+
+    if in_tmux:
+        logger.info(f"Spawning SCV {objective_id} in new tmux window (Interactive)...")
+        env_vars = f"GEMINI_SYSTEM_MD={shlex.quote(system_prompt_path)} ADJUTANT_DISABLE_HOOK=1"
+        gemini_cmd_str = shlex.join(cmd)
+        
+        tmux_target_cmd = f"cd {shlex.quote(worktree_path)} && env {env_vars} {gemini_cmd_str}"
+        
+        tmux_cmd = [
+            "tmux", "new-window", 
+            "-P", "-F", "#{pane_pid}",
+            "-n", f"task-{objective_id}", 
+            tmux_target_cmd
+        ]
+        
+        try:
+            output = subprocess.check_output(tmux_cmd, env=env, stderr=subprocess.STDOUT, text=True).strip()
+            if output.isdigit():
+                process_pid = int(output)
+            else:
+                logger.warning(f"Failed to parse PID from tmux output: {output}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to spawn tmux window: {e.output.strip() if hasattr(e, 'output') and e.output else e}")
+            logger.info("Falling back to standard background execution...")
+            in_tmux = False
+
+    if not in_tmux:
+        log_file = open(log_path, "a")
+        process = subprocess.Popen(
+            cmd,
+            stdout=log_file,
+            stderr=log_file,
+            cwd=worktree_path,
+            env=env,
+            start_new_session=True
+        )
+        process_pid = process.pid
+        log_file.close()
 
     # Write worktree-local SCV info
-    scv_info_path = os.path.join(worktree_path, ".scv_info.json")
-    try:
-        with open(scv_info_path, "w") as f:
-            json.dump({
-                "pid": process.pid,
-                "agent_name": agent_name,
-                "model": model, 
-                "directive": directive,
-                "start_time": datetime.now(timezone.utc).isoformat()
-            }, f, indent=2)
-    except Exception as e:
-        logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
+    if process_pid:
+        scv_info_path = os.path.join(worktree_path, ".scv_info.json")
+        try:
+            with open(scv_info_path, "w") as f:
+                json.dump({
+                    "pid": process_pid,
+                    "agent_name": agent_name,
+                    "model": model, 
+                    "directive": directive,
+                    "start_time": datetime.now(timezone.utc).isoformat(),
+                    "in_tmux": in_tmux
+                }, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to write .scv_info.json to {scv_info_path}: {e}")
 
-    logger.info(f"Spawned {agent_name} for {objective_id}. Logging to {log_path}")
+    logger.info(f"Spawned {agent_name} for {objective_id}. PID: {process_pid}. Logging to {log_path}")
 
 def show_status():
     """Displays the current status of the Adjutant mission and active SCVs."""
