@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import subprocess
 from adjutant.engine import (
     run_adjutant_agent, 
     spawn_agent, 
@@ -8,8 +9,11 @@ from adjutant.engine import (
     show_status, 
     show_logs,
     setup_logging, 
-    get_project_root
+    get_project_root,
+    plan_out_tmux,
+    abort_scv
 )
+from adjutant.tui import run_tui
 
 def main():
     parser = argparse.ArgumentParser(
@@ -49,6 +53,27 @@ def main():
     # If the first argument is not a known command or help, and there are args, assume 'plan'
     known_commands = list(subparsers.choices.keys()) + ["-h", "--help"]
     if len(sys.argv) > 1 and sys.argv[1] not in known_commands:
+        if len(sys.argv) == 2:
+            potential_bd_id = sys.argv[1]
+            # Heuristic: if it looks like one of our bead IDs, we expect it to be a valid shortcut
+            if potential_bd_id.startswith("adjutant-"):
+                try:
+                    subprocess.run(["bd", "show", potential_bd_id], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    plan_out_tmux(potential_bd_id)
+                    sys.exit(0)
+                except subprocess.CalledProcessError:
+                    print(f"Error: Invalid bead ID '{potential_bd_id}'. No such bead found in database.", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                # For other single arguments, try it as an ID but fallback silently if not found
+                try:
+                    subprocess.run(["bd", "show", potential_bd_id], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    plan_out_tmux(potential_bd_id)
+                    sys.exit(0)
+                except subprocess.CalledProcessError:
+                    # Fallback to 'plan' subcommand for directives
+                    pass
+                
         sys.argv.insert(1, "plan")
     
     args = parser.parse_args()
@@ -63,7 +88,6 @@ def main():
             spawn_kwargs["directive"] = args.directive
         spawn_agent(args.agent, args.objective_id, **spawn_kwargs)
     elif args.command == "abort":
-        from adjutant.engine import abort_scv
         setup_logging(to_stdout=True, log_file=log_path)
         print(f"Aborting SCV for {args.objective_id}...")
         abort_scv(args.objective_id)
@@ -76,7 +100,6 @@ def main():
         setup_logging(to_stdout=True, log_file=log_path)
         show_status()
     elif args.command == "tui":
-        from adjutant.tui import run_tui
         setup_logging(to_stdout=False, log_file=log_path)
         run_tui()
     elif args.command == "logs":

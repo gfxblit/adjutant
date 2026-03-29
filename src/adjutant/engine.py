@@ -6,11 +6,15 @@ import threading
 import json
 import logging
 import shlex
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
 # Setup logger
 logger = logging.getLogger("adjutant")
+
+TMUX_SESSION_PREFIX = "epic--"
+
 
 def format_duration(iso_date: str) -> str:
     """Formats the duration from iso_date until now as a short string (e.g., 2h15m)."""
@@ -452,6 +456,55 @@ def recover_orphaned_scvs(project_root: str):
     for entry in found_orphans:
         cleanup_scv(entry, project_root)
 
+
+def plan_out_tmux(bd_id: str):
+    """Starts an interactive planning session for a specific bead in a tmux session."""
+    try:
+        output = subprocess.check_output(["bd", "show", bd_id, "--json"], text=True)
+        bd_data = json.loads(output)
+        title = bd_data.get("title", "planning")
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        title = "planning"
+
+    slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+    if not slug:
+        slug = "planning"
+
+    session_name = f"{TMUX_SESSION_PREFIX}{bd_id}"
+    
+    # Check if session already exists
+    session_exists = False
+    try:
+        subprocess.run(["tmux", "has-session", "-t", session_name], check=True, capture_output=True)
+        session_exists = True
+    except FileNotFoundError:
+        logger.error("tmux not found. Please install tmux to use this feature.")
+        sys.exit(1)
+    except subprocess.CalledProcessError:
+        pass # Session doesn't exist, create it
+
+    if session_exists:
+        os.execvp("tmux", ["tmux", "attach-session", "-t", session_name])
+    else:
+        try:
+            # Create detached session
+            subprocess.run(["tmux", "new-session", "-d", "-s", session_name, "-n", slug[:50]], check=True)
+            
+            # Send keys to window 0
+            planner_directive = f"Activate the planner skill. Read bead {bd_id} and clarify requirements with me."
+            gemini_cmd_parts = [
+                "gemini",
+                "--allowed-tools", "run_shell_command,activate_skill",
+                "-i", planner_directive
+            ]
+            cmd = f"{shlex.join(gemini_cmd_parts)}\n"
+            subprocess.run(["tmux", "send-keys", "-t", f"{session_name}:0", cmd], check=True)
+            
+            # Attach to the session
+            os.execvp("tmux", ["tmux", "attach-session", "-t", session_name])
+        except (subprocess.CalledProcessError, OSError) as e:
+            logger.error(f"Failed to start tmux session: {e}")
+            sys.exit(1)
 
 
 def run_adjutant_agent(initial_directive: str):
