@@ -453,6 +453,51 @@ def recover_orphaned_scvs(project_root: str):
         cleanup_scv(entry, project_root)
 
 
+def plan_out_tmux(bd_id: str):
+    """Starts an interactive planning session for a specific bead in a tmux session."""
+    import re
+    
+    try:
+        output = subprocess.check_output(["bd", "show", bd_id, "--json"], text=True)
+        bd_data = json.loads(output)
+        title = bd_data.get("title", "planning")
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        title = "planning"
+
+    slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+    if not slug:
+        slug = "planning"
+
+    session_name = f"epic--{bd_id}"
+    
+    # Check if session already exists
+    session_exists = False
+    try:
+        subprocess.run(["tmux", "has-session", "-t", session_name], check=True, capture_output=True)
+        session_exists = True
+    except FileNotFoundError:
+        logger.error("tmux not found. Please install tmux to use this feature.")
+        sys.exit(1)
+    except subprocess.CalledProcessError:
+        pass # Session doesn't exist, create it
+
+    if session_exists:
+        os.execvp("tmux", ["tmux", "attach-session", "-t", session_name])
+    else:
+        try:
+            # Create detached session
+            subprocess.run(["tmux", "new-session", "-d", "-s", session_name, "-n", slug[:50]], check=True)
+            
+            # Send keys to window 0
+            cmd = f'gemini --allowed-tools run_shell_command,activate_skill -i "Activate the planner skill. Read bead {bd_id} and clarify requirements with me."\n'
+            subprocess.run(["tmux", "send-keys", "-t", f"{session_name}:0", cmd], check=True)
+            
+            # Attach to the session
+            os.execvp("tmux", ["tmux", "attach-session", "-t", session_name])
+        except Exception as e:
+            logger.error(f"Failed to start tmux session: {e}")
+            sys.exit(1)
+
 
 def run_adjutant_agent(initial_directive: str):
     """

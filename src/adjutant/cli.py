@@ -49,6 +49,17 @@ def main():
     # If the first argument is not a known command or help, and there are args, assume 'plan'
     known_commands = list(subparsers.choices.keys()) + ["-h", "--help"]
     if len(sys.argv) > 1 and sys.argv[1] not in known_commands:
+        if len(sys.argv) == 2:
+            potential_bd_id = sys.argv[1]
+            try:
+                import subprocess
+                subprocess.run(["bd", "show", potential_bd_id], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                from adjutant.engine import plan_out_tmux
+                plan_out_tmux(potential_bd_id)
+                sys.exit(0)
+            except subprocess.CalledProcessError:
+                pass
+                
         sys.argv.insert(1, "plan")
     
     args = parser.parse_args()
