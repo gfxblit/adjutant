@@ -557,6 +557,38 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     """
     Spawns a sub-agent asynchronously.
     """
+    # Auto-apply copium-loop formula if objective has no children
+    try:
+        children_out = subprocess.check_output(["bd", "children", objective_id, "--json"], text=True, stderr=subprocess.DEVNULL)
+        try:
+            children_data = json.loads(children_out)
+        except json.JSONDecodeError:
+            children_data = []
+            
+        if not children_data:
+            FORMULA_NAME = "copium-loop"
+            logger.info(f"No children found for {objective_id}. Instantiating {FORMULA_NAME} formula...")
+            output = subprocess.check_output(["bd", "show", objective_id, "--json"], text=True, stderr=subprocess.DEVNULL)
+            try:
+                bd_data = json.loads(output)
+            except json.JSONDecodeError:
+                bd_data = {}
+                
+            if isinstance(bd_data, list) and len(bd_data) > 0:
+                bd_data = bd_data[0]
+            title = bd_data.get("title", objective_id)
+            
+            # Ensure proto is persisted and bond
+            cook_result = subprocess.run(["bd", "cook", FORMULA_NAME, "--persist", "--force"], check=False, capture_output=True, text=True)
+            if cook_result.returncode != 0:
+                logger.warning(f"Failed to cook {FORMULA_NAME} formula. Stderr: {cook_result.stderr.strip()}")
+                
+            bond_result = subprocess.run(["bd", "mol", "bond", FORMULA_NAME, objective_id, "--var", f"feature={title}"], check=False, capture_output=True, text=True)
+            if bond_result.returncode != 0:
+                logger.warning(f"Failed to bond {FORMULA_NAME} formula to {objective_id}. Stderr: {bond_result.stderr.strip()}")
+    except Exception as e:
+        logger.warning(f"Could not check or apply formula to {objective_id}: {e}")
+
     # Mark the objective as in_progress in bd
     try:
         subprocess.run(["bd", "update", objective_id, "--status", "in_progress"], check=False, capture_output=True)
