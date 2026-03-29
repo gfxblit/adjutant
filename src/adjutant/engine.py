@@ -462,8 +462,10 @@ def plan_out_tmux(bd_id: str):
     try:
         output = subprocess.check_output(["bd", "show", bd_id, "--json"], text=True)
         bd_data = json.loads(output)
+        if isinstance(bd_data, list) and len(bd_data) > 0:
+            bd_data = bd_data[0]
         title = bd_data.get("title", "planning")
-    except (subprocess.CalledProcessError, json.JSONDecodeError):
+    except (subprocess.CalledProcessError, json.JSONDecodeError, AttributeError, IndexError):
         title = "planning"
 
     slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
