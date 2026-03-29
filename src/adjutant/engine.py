@@ -557,6 +557,28 @@ def spawn_agent(agent_name: str, objective_id: str, starting_model: str = None, 
     """
     Spawns a sub-agent asynchronously.
     """
+    # Auto-apply copium-loop formula if objective has no children
+    try:
+        children_out = subprocess.check_output(["bd", "children", objective_id, "--json"], text=True, stderr=subprocess.DEVNULL)
+        try:
+            children_data = json.loads(children_out)
+        except json.JSONDecodeError:
+            children_data = []
+            
+        if not children_data:
+            logger.info(f"No children found for {objective_id}. Instantiating copium-loop formula...")
+            output = subprocess.check_output(["bd", "show", objective_id, "--json"], text=True, stderr=subprocess.DEVNULL)
+            bd_data = json.loads(output)
+            if isinstance(bd_data, list) and len(bd_data) > 0:
+                bd_data = bd_data[0]
+            title = bd_data.get("title", objective_id)
+            
+            # Ensure proto is persisted and bond
+            subprocess.run(["bd", "cook", "copium-loop", "--persist", "--force"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["bd", "mol", "bond", "copium-loop", objective_id, "--var", f"feature={title}"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        logger.warning(f"Could not check or apply formula to {objective_id}: {e}")
+
     # Mark the objective as in_progress in bd
     try:
         subprocess.run(["bd", "update", objective_id, "--status", "in_progress"], check=False, capture_output=True)
