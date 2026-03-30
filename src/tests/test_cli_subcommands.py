@@ -69,3 +69,13 @@ def test_logs_subcommand_follow():
                 mock_get_root.return_value = "/tmp/project"
                 main()
                 mock_show_logs.assert_called_once_with("adjutant-123", follow=True)
+
+def test_close_subcommand():
+    # Test 'close' subcommand
+    test_args = ["adjutant", "close", "adjutant-123"]
+    with patch.object(sys, "argv", test_args):
+        with patch("adjutant.cli.cleanup_scv") as mock_cleanup:
+            with patch("adjutant.cli.get_project_root") as mock_get_root:
+                mock_get_root.return_value = "/tmp/project"
+                main()
+                mock_cleanup.assert_called_once_with("adjutant-123", "/tmp/project")

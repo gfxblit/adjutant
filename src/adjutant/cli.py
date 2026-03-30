@@ -11,7 +11,8 @@ from adjutant.engine import (
     setup_logging, 
     get_project_root,
     plan_out_tmux,
-    abort_scv
+    abort_scv,
+    cleanup_scv
 )
 from adjutant.tui import run_tui
 
@@ -45,6 +46,10 @@ def main():
     # abort subcommand
     abort_parser = subparsers.add_parser("abort", help="Abort a running SCV")
     abort_parser.add_argument("objective_id", help="Objective ID to abort")
+
+    # close subcommand
+    close_parser = subparsers.add_parser("close", help="Close a mission, committing any stranded work and removing its worktree")
+    close_parser.add_argument("objective_id", help="Objective ID to close")
 
     # tui subcommand
     subparsers.add_parser("tui", help="Launch the Adjutant TUI Dashboard")
@@ -91,6 +96,11 @@ def main():
         setup_logging(to_stdout=True, log_file=log_path)
         print(f"Aborting SCV for {args.objective_id}...")
         abort_scv(args.objective_id)
+    elif args.command == "close":
+        setup_logging(to_stdout=True, log_file=log_path)
+        print(f"Closing mission {args.objective_id}...")
+        cleanup_scv(args.objective_id, project_root)
+        print(f"Mission {args.objective_id} closed.")
     elif args.command == "recover":
         setup_logging(to_stdout=False, log_file=log_path)
         print("Initiating SCV worktree recovery...")
